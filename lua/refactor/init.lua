@@ -234,7 +234,8 @@ local function get_user_input(scope, prefill_find)
     local scope_text = scope == "quickfix" and "Quickfix List" or "Current Buffer"
 
     vim.cmd('redraw')
-    vim.notify("Flag Format: [C/c][W/w][R/r][P/p]\nC: Case-Sensitive | c: Case-Insensitive\nW: Whole String | w: Partial String\nR: RegEx | r: Literal Text\nP: Preserve Case while Replacing | p: Not Preserve Case while Replacing", vim.log.levels.INFO)
+    vim.notify("Flag Format: [C/c][W/w][R/r][P/p]", vim.log.levels.INFO)
+    vim.notify("C/c : Case Sensitive/Insensitive\nW/w : Match Whole/Partial String\nR/r : RegEx/Literal-Text\nP/p : Preserve/Not Case while Replacing", vim.log.levels.INFO)
     vim.notify("Example: cWrp (Case-insensitive Match), CWrp (Exact Match), CWRp (RegEx)", vim.log.levels.INFO)
     local flags_input = vim.fn.input("Flags [C/c W/w R/r P/p]: ", config.default_flags)
     if flags_input == "" then
