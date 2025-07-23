@@ -329,7 +329,7 @@ local function get_user_input(scope, prefill_find)
 
     -- Analyze complexity
     local has_special_chars = find_str:find('[/\\\'"`\n\r\t%[%]%(%){|}%^%$%.%*%+%?]')
-    if has_special_chars and flags.use_regex then
+    if has_special_chars and flags and flags.use_regex then
         print("\n⚠️  Special characters detected in REGEX mode. Ensure pattern is valid.")
     elseif has_special_chars then
         print("\n✅ Special characters detected. Using LITERAL mode for safe handling.")
