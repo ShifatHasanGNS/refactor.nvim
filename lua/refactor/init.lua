@@ -57,32 +57,6 @@ local function parse_flags(flag_str)
     return flags
 end
 
--- Beautiful flag display with icons and descriptions
-local function format_flags_display(flags)
-    if not flags then return "" end
-
-    local parts = {
-        string.format("%s %s", 
-            flags.case_sensitive and config.icons.case.on or config.icons.case.off,
-            flags.case_sensitive and "Case-Sensitive" or "Case-Insensitive"
-        ),
-        string.format("%s %s", 
-            flags.whole_word and config.icons.word.on or config.icons.word.off,
-            flags.whole_word and "Exact Word Match" or "Partial Word Match"
-        ),
-        string.format("%s %s", 
-            flags.use_regex and config.icons.regex.on or config.icons.regex.off,
-            flags.use_regex and "RegEx Mode" or "Literal Text"
-        ),
-        string.format("%s %s", 
-            flags.preserve_case and config.icons.preserve.on or config.icons.preserve.off,
-            flags.preserve_case and "Preserve Case" or "Exact Replace"
-        )
-    }
-
-    return table.concat(parts, " | ")
-end
-
 -- Enhanced pattern building with robust escaping for complex text
 local function build_search_pattern(find_str, flags)
     local pattern = find_str
@@ -247,7 +221,7 @@ local function get_user_input(scope, prefill_find)
         vim.notify("🚫 Refactor cancelled: Invalid flag", vim.log.levels.INFO)
         return nil
     end
-    vim.notify("Current Flags: " .. format_flags_display(flags), vim.log.levels.INFO)
+    vim.notify("Current Flags: "..flags, vim.log.levels.INFO)
 
     if scope == "quickfix" then
         vim.notify("Choose Replace Mode: auto (fast, all files) or manual (precise, per line)", vim.log.levels.INFO)
@@ -441,9 +415,7 @@ local function refactor(use_quickfix, prefill_find)
         mode_info = string.format(" [%s %s]", mode_icon, params.replace_mode:upper())
     end
 
-    vim.notify(string.format("🚀 Refactor%s - [%s]: %s", 
-        mode_info, flag_str, format_flags_display(params.flags)), vim.log.levels.INFO)
-    vim.notify(string.format("Find: '%s' | Replace: '%s'", params.find, params.replace), vim.log.levels.INFO)
+    vim.notify(string.format("🚀 Refactor%s - [%s]: '%s' ⟶ '%s'", mode_info, flag_str, params.find, params.replace), vim.log.levels.INFO)
 
     local success
     if use_quickfix then
