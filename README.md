@@ -1,6 +1,6 @@
 # 🔧 Refactor.nvim
 
-**The most intuitive and powerful find & replace plugin for Neovim**
+<!-- **The most intuitive and powerful find & replace plugin for Neovim**
 
 Transform your refactoring workflow with smart 4-letter flags, beautiful UX, and rock-solid reliability. Whether you're renaming a single variable or refactoring across your entire codebase, Refactor.nvim makes it effortless and safe.
 
@@ -183,4 +183,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 [⭐ Star this repo](https://github.com/shifathasangns/refactor.nvim) • [🐛 Report Issues](https://github.com/shifathasangns/refactor.nvim/issues) • [💡 Feature Requests](https://github.com/shifathasangns/refactor.nvim/discussions)
 
-</div>
+</div> -->
