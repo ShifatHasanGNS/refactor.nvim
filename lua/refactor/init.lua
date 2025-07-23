@@ -234,97 +234,26 @@ local function get_user_input(scope, prefill_find)
     local scope_text = scope == "quickfix" and "Quickfix List" or "Current Buffer"
 
     vim.cmd('redraw')
-    print(string.format("🔧 Refactor Mode: %s %s", scope_icon, scope_text))
-    print("📋 Flag Format: [Case][Word][Regex][Preserve]")
-    print("   C/c=Case sensitive/insensitive, W/w=Whole/partial word, R/r=Regex/literal, P/p=Preserve/exact case")
-    print("   💡 For complex text with special chars, use 'cWrp' (literal mode)")
-    print("   Examples: cWrp (default), CWrp (exact-match), CWRp (regex)")
+    local flags_input = vim.fn.input("Flags [C/c W/w R/r P/p]: ", config.default_flags)
+    if flags_input == "" then return nil end
+    local flags = parse_flags(flags_input)
+    if not flags then return nil end
 
-    -- Get flags with validation loop
-    local flags
-    repeat
-        local flags_input = vim.fn.input("🏁 Flags: ", config.default_flags)
-        if flags_input == "" then 
-            vim.notify("🚫 Operation Cancelled", vim.log.levels.INFO)
-            return nil
-        end
-        flags = parse_flags(flags_input)
-    until flags
-
-    print("\n" .. format_flags_display(flags))
-
-    -- Get replace mode for quickfix operations
     local replace_mode = config.default_quickfix_mode
     if scope == "quickfix" then
-        print("\n🔄 Replace Mode Options:")
-        print("   auto   - Use cfdo command (faster, may fail on complex patterns)")
-        print("   manual - Process each buffer individually (slower, more reliable)")
-        print("   💡 For complex text, 'manual' mode is recommended")
-        
-        local mode_input = vim.fn.input("🔄 Replace Mode [auto/manual]: ", replace_mode)
-        
-        if mode_input == "" then
-            vim.notify("🚫 Operation Cancelled", vim.log.levels.INFO)
-            return nil
-        end
-        
+        local mode_input = vim.fn.input("Replace Mode [auto/manual]: ", replace_mode)
+        if mode_input == "" then return nil end
         if mode_input:lower():match("^m") then
             replace_mode = "manual"
         elseif mode_input:lower():match("^a") then
             replace_mode = "auto"
-        else
-            vim.notify("⚠️ Invalid mode, defaulting to '" .. replace_mode .. "'", vim.log.levels.WARN)
         end
-        
-        local mode_icon = replace_mode == "auto" and "⚡" or "🔧"
-        print(string.format("\n%s Selected Mode: %s", mode_icon, replace_mode:upper()))
     end
 
-    -- Get find string
-    local find_prompt = prefill_find and "🔍 Find (pre-filled): " or "🔍 Find: "
-    local find_default = prefill_find or ""
-    
-    if prefill_find and prefill_find:find('[/\\\'"`\n\r\t]') then
-        print("\n💡 Detected special characters in selection. Using literal mode is recommended.")
-    end
-    
-    local find_str = vim.fn.input(find_prompt, find_default)
-
-    if find_str == "" then 
-        vim.notify("🚫 Operation Cancelled", vim.log.levels.INFO)
-        return nil 
-    end
-
-    -- Analyze complexity
-    local has_special_chars = find_str:find('[/\\\'"`\n\r\t%[%]%(%){|}%^%$%.%*%+%?]')
-    if has_special_chars and flags and flags.use_regex then
-        print("\n⚠️  Special characters detected in REGEX mode. Ensure pattern is valid.")
-    elseif has_special_chars then
-        print("\n✅ Special characters detected. Using LITERAL mode for safe handling.")
-    end
-
-    -- Get replace string
-    local replace_str = vim.fn.input("🔄 Replace: ")
-
-    -- Show preview
-    local preview_find = #find_str > 50 and (find_str:sub(1, 47) .. "...") or find_str
-    local preview_replace = #replace_str > 50 and (replace_str:sub(1, 47) .. "...") or replace_str
-    
-    print(string.format("\n📋 Preview: '%s' → '%s'", preview_find, preview_replace))
-    if scope == "quickfix" then
-        print(string.format("🔄 Mode: %s", replace_mode:upper()))
-    end
-    
-    if #find_str > 20 or #replace_str > 20 then
-        print(string.format("📏 Length: Find=%d chars, Replace=%d chars", #find_str, #replace_str))
-    end
-
-    -- Final confirmation
-    local confirm = vim.fn.input("🚀 Continue? [Y/n]: ", "Y")
-    if confirm:lower() == "n" or confirm:lower() == "no" then
-        vim.notify("🚫 Operation Cancelled", vim.log.levels.INFO)
-        return nil
-    end
+    local find_str = vim.fn.input("Find: ", prefill_find or "")
+    if find_str == "" then return nil end
+    local replace_str = vim.fn.input("Replace: ")
+    if replace_str == "" then return nil end
 
     return {
         flags = flags,
@@ -405,38 +334,21 @@ local function execute_quickfix_replace_manual(params)
     local original_buf = vim.fn.bufnr('%')
     local original_pos = vim.fn.getcurpos()
     
-    -- Group by buffer
-    local buffers = {}
+    -- Process only the specific lines referenced by the quickfix list
     for _, qf_item in ipairs(qf_list) do
-        if qf_item.bufnr and qf_item.bufnr > 0 then
-            if not buffers[qf_item.bufnr] then
-                buffers[qf_item.bufnr] = {}
-            end
-            table.insert(buffers[qf_item.bufnr], qf_item)
-        end
-    end
-    
-    -- Process each buffer
-    for bufnr, items in pairs(buffers) do
-        local filename = vim.fn.bufname(bufnr)
-        if filename ~= "" and not processed_files[bufnr] then
+        if qf_item.bufnr and qf_item.bufnr > 0 and qf_item.lnum and qf_item.lnum > 0 then
+            local filename = vim.fn.bufname(qf_item.bufnr)
             local display_name = vim.fn.fnamemodify(filename, ":t")
-            vim.notify(string.format("🔧 Processing: %s", display_name), vim.log.levels.INFO)
-            
             local ok = pcall(function()
-                vim.cmd('buffer ' .. bufnr)
-                
+                vim.cmd('buffer ' .. qf_item.bufnr)
                 local replace = escape_replacement_string(params.replace, params.flags.preserve_case)
-                local cmd = '%s/' .. pattern .. '/' .. replace .. '/gc'
+                local cmd = string.format("%ds/%s/%s/gc", qf_item.lnum, pattern, replace)
                 if not params.flags.case_sensitive then
                     cmd = cmd .. 'i'
                 end
-                
                 vim.cmd(cmd)
-                processed_files[bufnr] = true
                 success_count = success_count + 1
             end)
-            
             if not ok then
                 error_count = error_count + 1
                 vim.notify("❌ Failed to process: " .. display_name, vim.log.levels.ERROR)
