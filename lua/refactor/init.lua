@@ -3,6 +3,8 @@
 -- Author: Md. Shifat Hasan (ShifatHasanGNS)
 -- License: MIT
 
+-- TODO: Need to Fix the 'QuickFix List' issue
+
 local M = {}
 
 -- Plugin configuration with sensible defaults
