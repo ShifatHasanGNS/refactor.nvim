@@ -1,10 +1,10 @@
-# 🔧 Refactor.nvim
+# 🔧 refactor.nvim
 
 <!-- **The most intuitive and powerful find & replace plugin for Neovim**
 
-Transform your refactoring workflow with smart 4-letter flags, beautiful UX, and rock-solid reliability. Whether you're renaming a single variable or refactoring across your entire codebase, Refactor.nvim makes it effortless and safe.
+Transform your refactoring workflow with smart 4-letter flags, beautiful UX, and rock-solid reliability. Whether you're renaming a single variable or refactoring across your entire codebase, refactor.nvim makes it effortless and safe.
 
-![Demo](https://via.placeholder.com/800x400/1a1b26/7aa2f7?text=Refactor.nvim+Demo)
+![Demo](https://via.placeholder.com/800x400/1a1b26/7aa2f7?text=refactor.nvim+Demo)
 
 ## ✨ Features
 
@@ -50,7 +50,7 @@ use {
 
 ## 🎯 Flag System
 
-The heart of Refactor.nvim is its **4-letter flag system** - each position controls a specific behavior:
+The heart of refactor.nvim is its **4-letter flag system** - each position controls a specific behavior:
 
 ```
 Position:  1    2    3    4
@@ -151,9 +151,9 @@ require("refactor").setup({
 3. **Confirmation** shows selected text
 4. **Enter replacement** and flags
 
-## 🔍 Why Refactor.nvim?
+## 🔍 Why refactor.nvim?
 
-| Traditional Approach  | Refactor.nvim               |
+| Traditional Approach  | refactor.nvim               |
 | --------------------- | --------------------------- |
 | `:s/old/new/gc`       | `cWrp` + intuitive prompts  |
 | Remember regex syntax | Smart 4-letter flags        |
