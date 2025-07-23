@@ -566,9 +566,7 @@ function M.setup(opts)
 
     -- Check if plugin is loaded
     local ok, _ = pcall(require, 'refactor')
-    if ok then
-        vim.notify("🚀 Advanced Refactor plugin loaded! Use " .. base_keymap .. " or :Refactor", vim.log.levels.INFO)
-    else
+    if not ok then
         vim.notify("⚠️ Failed to load Refactor plugin! Use ", vim.log.levels.ERROR)
     end
 end
