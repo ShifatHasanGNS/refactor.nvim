@@ -221,7 +221,13 @@ local function get_user_input(scope, prefill_find)
         vim.notify("🚫 Refactor cancelled: Invalid flag", vim.log.levels.INFO)
         return nil
     end
-    vim.notify("Current Flags: "..flags, vim.log.levels.INFO)
+    local flag_str = string.format("%s%s%s%s",
+        flags.case_sensitive and "C" or "c",
+        flags.whole_word and "W" or "w",
+        flags.use_regex and "R" or "r",
+        flags.preserve_case and "P" or "p"
+    )
+    vim.notify("Current Flags: "..flag_str, vim.log.levels.INFO)
 
     if scope == "quickfix" then
         vim.notify("Choose Replace Mode: auto (fast, all files) or manual (precise, per line)", vim.log.levels.INFO)
