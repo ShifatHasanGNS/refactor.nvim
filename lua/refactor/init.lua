@@ -564,7 +564,13 @@ function M.setup(opts)
         refactor(true)
     end, vim.tbl_extend('force', keymap_opts, { desc = "📋 Refactor QuickFix List" }))
 
-    vim.notify("🚀 Advanced Refactor plugin loaded! Use " .. base_keymap .. " or :Refactor", vim.log.levels.INFO)
+    -- Check if plugin is loaded
+    local ok, _ = pcall(require, 'refactor')
+    if ok then
+        vim.notify("🚀 Advanced Refactor plugin loaded! Use " .. base_keymap .. " or :Refactor", vim.log.levels.INFO)
+    else
+        vim.notify("⚠️ Failed to load Refactor plugin! Use ", vim.log.levels.ERROR)
+    end
 end
 
 -- Export functions
