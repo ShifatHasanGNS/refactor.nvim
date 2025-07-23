@@ -234,15 +234,26 @@ local function get_user_input(scope, prefill_find)
     local scope_text = scope == "quickfix" and "Quickfix List" or "Current Buffer"
 
     vim.cmd('redraw')
+    print("Flag Format: [C/c][W/w][R/r][P/p]  |  C=Case, W=Word, R=Regex, P=Preserve")
+    print("Example: cWrp (default), CWrp (case-sensitive), CWRp (regex)")
     local flags_input = vim.fn.input("Flags [C/c W/w R/r P/p]: ", config.default_flags)
-    if flags_input == "" then return nil end
+    if flags_input == "" then
+        vim.notify("🚫 Refactor cancelled: No flag entered", vim.log.levels.INFO)
+        return nil
+    end
     local flags = parse_flags(flags_input)
-    if not flags then return nil end
+    if not flags then
+        vim.notify("🚫 Refactor cancelled: Invalid flag", vim.log.levels.INFO)
+        return nil
+    end
 
     local replace_mode = config.default_quickfix_mode
     if scope == "quickfix" then
         local mode_input = vim.fn.input("Replace Mode [auto/manual]: ", replace_mode)
-        if mode_input == "" then return nil end
+        if mode_input == "" then
+            vim.notify("🚫 Refactor cancelled: No replace mode selected", vim.log.levels.INFO)
+            return nil
+        end
         if mode_input:lower():match("^m") then
             replace_mode = "manual"
         elseif mode_input:lower():match("^a") then
@@ -251,9 +262,15 @@ local function get_user_input(scope, prefill_find)
     end
 
     local find_str = vim.fn.input("Find: ", prefill_find or "")
-    if find_str == "" then return nil end
+    if find_str == "" then
+        vim.notify("🚫 Refactor cancelled: No find string entered", vim.log.levels.INFO)
+        return nil
+    end
     local replace_str = vim.fn.input("Replace: ")
-    if replace_str == "" then return nil end
+    if replace_str == "" then
+        vim.notify("🚫 Refactor cancelled: No replace string entered", vim.log.levels.INFO)
+        return nil
+    end
 
     return {
         flags = flags,
@@ -339,9 +356,11 @@ local function execute_quickfix_replace_manual(params)
         if qf_item.bufnr and qf_item.bufnr > 0 and qf_item.lnum and qf_item.lnum > 0 then
             local filename = vim.fn.bufname(qf_item.bufnr)
             local display_name = vim.fn.fnamemodify(filename, ":t")
+            local replace = escape_replacement_string(params.replace, params.flags.preserve_case)
+            local preview = string.format("Line %d in %s: '%s' → '%s'", qf_item.lnum, display_name, params.find, params.replace)
+            vim.notify("🔄 Refactoring " .. preview, vim.log.levels.INFO)
             local ok = pcall(function()
                 vim.cmd('buffer ' .. qf_item.bufnr)
-                local replace = escape_replacement_string(params.replace, params.flags.preserve_case)
                 local cmd = string.format("%ds/%s/%s/gc", qf_item.lnum, pattern, replace)
                 if not params.flags.case_sensitive then
                     cmd = cmd .. 'i'
@@ -351,7 +370,9 @@ local function execute_quickfix_replace_manual(params)
             end)
             if not ok then
                 error_count = error_count + 1
-                vim.notify("❌ Failed to process: " .. display_name, vim.log.levels.ERROR)
+                vim.notify("❌ Failed to process " .. preview, vim.log.levels.ERROR)
+            else
+                vim.notify("✅ Success: " .. preview, vim.log.levels.INFO)
             end
         end
     end
