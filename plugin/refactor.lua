@@ -1,4 +1,4 @@
--- plugin/refactor.lua - Auto-loading setup for Refactor.nvim
+-- Auto-Setup
 
 -- Prevent loading twice
 if vim.g.loaded_refactor then
