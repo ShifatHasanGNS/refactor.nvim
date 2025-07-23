@@ -87,21 +87,18 @@ end
 local function build_search_pattern(find_str, flags)
     local pattern = find_str
 
+    -- Remove all newline characters, keep other characters as-is
+    pattern = pattern:gsub('[\n\r]', '')
+
     -- Handle empty search
     if pattern == "" then
         vim.notify("⚠️ Empty search pattern", vim.log.levels.WARN)
         return nil
     end
 
-    -- Handle complex text patterns
+    -- For literal text, escape only delimiter and backslash
     if not flags.use_regex then
-        -- For literal text, escape ALL special vim regex characters
-        pattern = vim.fn.escape(pattern, '/\\^$.*~[]{}()|+?&<>')
-        
-        -- Additional escaping for newlines and special characters
-        pattern = pattern:gsub('\n', '\\n')
-        pattern = pattern:gsub('\r', '\\r')
-        pattern = pattern:gsub('\t', '\\t')
+        pattern = pattern:gsub('([/\\])', '\\%1')
     else
         -- For regex mode, validate the pattern
         local ok, _ = pcall(vim.fn.match, "test", pattern)
@@ -118,7 +115,7 @@ local function build_search_pattern(find_str, flags)
 
     -- Add 'Very Magic' prefix for RegEx
     if flags.use_regex then
-        pattern = '\\v' .. pattern
+        pattern = '\v' .. pattern
     end
 
     return pattern
@@ -126,21 +123,14 @@ end
 
 -- Enhanced replacement string escaping for complex content
 local function escape_replacement_string(replace_str, preserve_case)
+    -- Remove all newline characters, keep other characters as-is
+    local single_line = replace_str:gsub('[\n\r]', '')
     if preserve_case then
-        return '\\=luaeval("_G.refactor_preserve_case_replace(_A[1], \'' .. 
-               vim.fn.escape(replace_str, "'\\") .. '\')", submatch(0))'
+        return '\\=luaeval("_G.refactor_preserve_case_replace(submatch(0), \'' ..
+               vim.fn.escape(single_line, "'\\") .. '\')"'
     else
-        local escaped = replace_str
-        escaped = escaped:gsub('\\', '\\\\')   -- Escape backslashes first
-        escaped = escaped:gsub('&', '\\&')     -- Escape ampersand
-        escaped = escaped:gsub('~', '\\~')     -- Escape tilde
-        escaped = escaped:gsub('/', '\\/')     -- Escape forward slash
-        
-        -- Handle newlines and special chars in replacement
-        escaped = escaped:gsub('\n', '\\r')
-        escaped = escaped:gsub('\r', '\\r')
-        escaped = escaped:gsub('\t', '\\t')
-        
+        -- Only escape delimiter and backslash
+        local escaped = single_line:gsub('([/\\])', '\\%1')
         return escaped
     end
 end
@@ -236,28 +226,6 @@ local function execute_buffer_replace(params)
         vim.notify("✅ Buffer replace completed", vim.log.levels.INFO)
         return true
     end
-end
-
--- Enhanced visual selection processing
-local function get_visual_selection()
-    local old_reg = vim.fn.getreg('"')
-    local old_regtype = vim.fn.getregtype('"')
-    
-    vim.cmd('normal! gvy')
-    local selected = vim.fn.getreg('"')
-    
-    vim.fn.setreg('"', old_reg, old_regtype)
-    
-    -- Preserve structure for complex text, normalize excessive whitespace
-    local trimmed = selected:gsub('^%s*(.-)%s*$', '%1')
-    
-    if #trimmed < #selected / 2 and #selected > 10 then
-        selected = selected:gsub('%s+', ' ')
-    else
-        selected = trimmed
-    end
-    
-    return selected
 end
 
 -- Enhanced input with comprehensive validation
@@ -552,7 +520,7 @@ end
 -- Plugin setup function
 function M.setup(opts)
     opts = opts or {}
-    
+
     -- Merge user config with defaults
     if opts.icons then
         config.icons = vim.tbl_deep_extend("force", config.icons, opts.icons)
@@ -580,11 +548,10 @@ function M.setup(opts)
         refactor(true)
     end, { desc = "Advanced Find and Replace in QuickFix List" })
 
-    -- Setup keymaps
+    -- Setup keymaps (normal mode only)
     local keymap_opts = { silent = true, noremap = true }
     local base_keymap = opts.keymap or '<leader>r'
 
-    -- Normal mode mappings
     vim.keymap.set('n', base_keymap, function()
         refactor(false)
     end, vim.tbl_extend('force', keymap_opts, { desc = "🔧 Refactor (Find & Replace)" }))
@@ -596,39 +563,6 @@ function M.setup(opts)
     vim.keymap.set('n', base_keymap .. 'q', function()
         refactor(true)
     end, vim.tbl_extend('force', keymap_opts, { desc = "📋 Refactor QuickFix List" }))
-
-    -- Visual mode mappings
-    vim.keymap.set('v', base_keymap, function()
-        local selected = get_visual_selection()
-        
-        if selected == "" then
-            vim.notify("⚠️ No text selected", vim.log.levels.WARN)
-            return
-        end
-        
-        if #selected > config.max_selection_length then
-            selected = selected:sub(1, config.max_selection_length) .. "..."
-            vim.notify(string.format("📏 Selection truncated to %d characters", config.max_selection_length), vim.log.levels.INFO)
-        end
-        
-        refactor(false, selected)
-    end, vim.tbl_extend('force', keymap_opts, { desc = "🔧 Refactor with Visual Selection" }))
-
-    vim.keymap.set('v', base_keymap .. 'q', function()
-        local selected = get_visual_selection()
-        
-        if selected == "" then
-            vim.notify("⚠️ No text selected", vim.log.levels.WARN)
-            return
-        end
-        
-        if #selected > config.max_selection_length then
-            selected = selected:sub(1, config.max_selection_length) .. "..."
-            vim.notify(string.format("📏 Selection truncated to %d characters", config.max_selection_length), vim.log.levels.INFO)
-        end
-        
-        refactor(true, selected)
-    end, vim.tbl_extend('force', keymap_opts, { desc = "📋 Refactor QuickFix with Visual Selection" }))
 
     vim.notify("🚀 Advanced Refactor plugin loaded! Use " .. base_keymap .. " or :Refactor", vim.log.levels.INFO)
 end
