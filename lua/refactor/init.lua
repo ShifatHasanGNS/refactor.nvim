@@ -283,7 +283,7 @@ local function get_user_input(scope)
         local flags_input = get_input_with_esc("Flags [c w r p]: ", config.default_flags, "flag")
         if flags_input == nil then return end  -- Cancelled
         local flags = parse_flags(flags_input or "")
-        if check_cancelled() or not flags then return end
+        if check_cancelled() or flags == nil then return end
 
         local flag_display = {}
         table.insert(flag_display, flags.case_sensitive and "Case-sensitive" or "Case-insensitive")
