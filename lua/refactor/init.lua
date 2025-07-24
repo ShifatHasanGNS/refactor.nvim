@@ -302,7 +302,7 @@ local function get_user_input(scope)
         table.insert(flag_display, flags.preserve_case and "Preserve-case" or "Normal-case")
 
         if check_cancelled() then return end
-        
+
         smart_notify("Active: " .. table.concat(flag_display, " | "), vim.log.levels.INFO)
 
         local find_str = get_input_with_esc("Find: ", "", "find")
@@ -514,6 +514,10 @@ function M.setup(opts)
     end, vim.tbl_extend('force', keymap_opts, { desc = "📋 Refactor QuickFix List" }))
 
     smart_notify("🔧 Refactor Plugin Loaded!", vim.log.levels.INFO)
+    local ok, _ = pcall(require, 'refactor')
+    if not ok then
+        smart_notify("⚠️ Failed to load Refactor (refactor.nvim)!", vim.log.levels.WARN)
+    end
 end
 
 -- Export
