@@ -1,5 +1,5 @@
 -- Refactor: Advanced Find & Replace Plugin Module for NeoVim
--- Version: 0.1.3
+-- Version: 0.1.1
 -- Author: Md. Shifat Hasan (ShifatHasanGNS)
 -- License: MIT
 
@@ -7,75 +7,12 @@ local M = {}
 
 local config = {
     default_flags = "",
-    min_notification_delay = 2000, -- Configurable minimum delay for summary notifications
+    -- Case-insensitive, Partial-match, Literal-text, Normal-case
 }
 
 local refactor_state = {
-    cancelled = false,
-    pending_delayed_notify = nil, -- Track pending delayed notifications
-    notification_in_progress = false, -- Prevent overlapping summary notifications
+    cancelled = false
 }
-
--- Moved to top-level for reusability and clarity
-local function delayed_notify(msg, level)
-    -- Cancel any pending delayed notification to avoid overlap
-    if refactor_state.pending_delayed_notify then
-        -- Use pcall to safely stop and close timer
-        pcall(function()
-            refactor_state.pending_delayed_notify:stop()
-            refactor_state.pending_delayed_notify:close()
-        end)
-        refactor_state.pending_delayed_notify = nil
-    end
-    
-    -- Prevent overlapping summary notifications
-    if refactor_state.notification_in_progress then
-        return
-    end
-    
-    -- Estimate reading time: 3 words per second
-    local word_count = 0
-    for _ in tostring(msg):gmatch("%S+") do 
-        word_count = word_count + 1 
-    end
-    local delay_ms = math.max(config.min_notification_delay, math.ceil(word_count / 3 * 1000))
-    
-    refactor_state.notification_in_progress = true
-    
-    -- Create timer with proper error handling
-    local timer = vim.loop.new_timer()
-    if not timer then
-        -- Fallback to immediate notification if timer creation fails
-        smart_notify(msg, level)
-        refactor_state.notification_in_progress = false
-        return
-    end
-    
-    refactor_state.pending_delayed_notify = timer
-    
-    -- Use pcall for safe timer operations
-    local success = pcall(function()
-        ---@diagnostic disable-next-line: undefined-field
-        timer:start(delay_ms, 0, vim.schedule_wrap(function()
-            smart_notify(msg, level)
-            refactor_state.notification_in_progress = false
-            if refactor_state.pending_delayed_notify == timer then
-                pcall(function()
-                    ---@diagnostic disable-next-line: undefined-field
-                    timer:close()
-                end)
-                refactor_state.pending_delayed_notify = nil
-            end
-        end))
-    end)
-    
-    if not success then
-        -- Fallback to immediate notification if timer start fails
-        smart_notify(msg, level)
-        refactor_state.notification_in_progress = false
-        refactor_state.pending_delayed_notify = nil
-    end
-end
 
 local function smart_notify(message, level, max_width)
     max_width = max_width or 80
@@ -161,7 +98,6 @@ end
 local function build_search_pattern(find_str, flags)
     local pattern = find_str
 
-    -- Remove newlines and carriage returns
     pattern = pattern:gsub('[\n\r]', '')
 
     if pattern == "" then
@@ -170,10 +106,8 @@ local function build_search_pattern(find_str, flags)
     end
 
     if not flags.use_regex then
-        -- Escape special characters for literal search
         pattern = pattern:gsub('([/\\])', '\\%1')
     else
-        -- Validate regex pattern
         local ok, _ = pcall(vim.fn.match, "test", pattern)
         if not ok then
             smart_notify("❌ Invalid regex pattern", vim.log.levels.ERROR)
@@ -203,29 +137,24 @@ local function escape_replacement_string(replace_str, preserve_case)
     end
 end
 
--- Apply case preservation logic based on original text pattern
 local function apply_case_preservation(original, replacement)
     if original == "" or replacement == "" then
         return replacement
     end
 
-    -- All uppercase
     if original == original:upper() and original ~= original:lower() then
         return replacement:upper()
     end
 
-    -- All lowercase
     if original == original:lower() and original ~= original:upper() then
         return replacement:lower()
     end
 
-    -- Title case (first letter uppercase, rest lowercase)
     if original:sub(1, 1) == original:sub(1, 1):upper() and
         (#original == 1 or original:sub(2) == original:sub(2):lower()) then
         return replacement:sub(1, 1):upper() .. replacement:sub(2):lower()
     end
 
-    -- Determine case based on uppercase ratio
     local upper_ratio = 0
     for i = 1, #original do
         if original:sub(i, i):match("%u") then
@@ -249,8 +178,7 @@ end
 -- Get Input: ESC Cancels, with mode for input type (required)
 -- mode: "flag", "find", "replace" (must be specified)
 local function get_input_with_esc(prompt, default, mode)
-    assert(mode == "flag" or mode == "find" or mode == "replace", 
-           "get_input_with_esc: mode must be 'flag', 'find', or 'replace'")
+    assert(mode == "flag" or mode == "find" or mode == "replace", "get_input_with_esc: mode must be 'flag', 'find', or 'replace'")
     default = default or ""
 
     vim.cmd('call inputsave()')
@@ -280,7 +208,10 @@ local function get_input_with_esc(prompt, default, mode)
 end
 
 local function check_cancelled()
-    return refactor_state.cancelled
+    if refactor_state.cancelled then
+        return true
+    end
+    return false
 end
 
 -- Buffer Replace with Smart Delimiter
@@ -305,8 +236,7 @@ local function execute_buffer_replace(params)
         smart_notify("❌ Could not find a safe delimiter for substitution", vim.log.levels.ERROR)
         return false
     end
-    
-    -- Escape For Delimiter (only if not using default '/')
+    -- Escape For Delimiter
     if delimiter ~= '/' then
         pattern = pattern:gsub('\\/', '/')
         pattern = vim.fn.escape(pattern, delimiter)
@@ -315,13 +245,10 @@ local function execute_buffer_replace(params)
             replace = vim.fn.escape(replace, delimiter)
         end
     end
-    
-    -- Build substitute command
     local cmd = '%s' .. delimiter .. pattern .. delimiter .. replace .. delimiter .. 'gc'
     if not params.flags.case_sensitive then
         cmd = cmd .. 'i'
     end
-    
     smart_notify("🔍 Searching in: " .. vim.fn.expand('%:t'), vim.log.levels.INFO)
     local ok, result = pcall(function() vim.cmd(cmd) end)
     if not ok then
@@ -333,24 +260,13 @@ local function execute_buffer_replace(params)
     end
 end
 
--- Async Input Handler
+-- Async Input
 local function get_user_input(scope)
-    -- Reset state and cancel any pending notifications
-    refactor_state.cancelled = false
-    if refactor_state.pending_delayed_notify then
-        pcall(function()
-            ---@diagnostic disable-next-line: undefined-field
-            refactor_state.pending_delayed_notify:stop()
-            ---@diagnostic disable-next-line: undefined-field
-            refactor_state.pending_delayed_notify:close()
-        end)
-        refactor_state.pending_delayed_notify = nil
-    end
-    refactor_state.notification_in_progress = false
+    refactor_state.cancelled = false  -- Reset Cancel
     
     vim.cmd('redraw')
     
-    -- Show Help Info with proper sequencing
+    -- Show Help Info
     smart_notify("🔧 Refactor: " .. (scope == "quickfix" and "Quickfix List" or "Current Buffer"), vim.log.levels.INFO)
     smart_notify("Press ESC at any input to cancel", vim.log.levels.INFO)
     
@@ -366,21 +282,20 @@ local function get_user_input(scope)
         smart_notify("Examples: 'cw'=Case+Whole, 'p'=Preserve only, ''=All defaults", vim.log.levels.INFO)
     end, 600)
     
-    -- Wait For Notifications then proceed with input
+    -- Wait For Notifications
     vim.defer_fn(function()
         if check_cancelled() then return end
-        
         -- Get Flags
         local flags_input = get_input_with_esc("Flags [c w r p]: ", config.default_flags, "flag")
+
+
         if check_cancelled() then return end
-        
         -- Treat nil as empty string (default flags)
         if flags_input == nil then flags_input = "" end
 
         local flags = parse_flags(flags_input)
         if check_cancelled() or not flags then return end
 
-        -- Display active flags
         local flag_display = {}
         table.insert(flag_display, flags.case_sensitive and "Case-sensitive" or "Case-insensitive")
         table.insert(flag_display, flags.whole_word and "Whole-word" or "Partial-match")
@@ -388,13 +303,12 @@ local function get_user_input(scope)
         table.insert(flag_display, flags.preserve_case and "Preserve-case" or "Normal-case")
         smart_notify("Active: " .. table.concat(flag_display, " | "), vim.log.levels.INFO)
 
-        -- Get find string
         local find_str = get_input_with_esc("Find: ", "", "find")
         if check_cancelled() or find_str == nil then return end
 
-        -- Get replace string (empty is valid)
         local replace_str = get_input_with_esc("Replace: ", "", "replace")
         if check_cancelled() or replace_str == nil then return end
+        -- Note: empty string for replace_str is valid (replace with empty string)
 
         -- Start Refactor
         local params = {
@@ -408,9 +322,13 @@ local function get_user_input(scope)
             end
         end, 100)
     end, 800)
+    
+    return nil  -- Async
 end
 
--- Improved quickfix replacement with deduplication and better error handling
+
+
+
 local function execute_quickfix_replace(params)
     if check_cancelled() then return false end
 
@@ -428,6 +346,7 @@ local function execute_quickfix_replace(params)
     smart_notify(string.format("🔧 Processing %d quickfix entries...", qf_count), vim.log.levels.INFO)
 
     local total_replacements = 0
+
     local original_buf = vim.fn.bufnr('%')
     local original_pos = vim.fn.getcurpos()
 
@@ -445,8 +364,6 @@ local function execute_quickfix_replace(params)
         smart_notify("❌ Could not find a safe delimiter for substitution", vim.log.levels.ERROR)
         return false
     end
-    
-    -- Escape pattern and replacement for the chosen delimiter
     if delimiter ~= '/' then
         pattern = pattern:gsub('\\/', '/')
         pattern = vim.fn.escape(pattern, delimiter)
@@ -456,79 +373,44 @@ local function execute_quickfix_replace(params)
         end
     end
 
-    -- Collect and deduplicate line numbers for each buffer
+    -- Collect line numbers for each buffer
     local buffers_to_lines = {}
     for _, qf_item in ipairs(qf_list) do
         if qf_item.bufnr and qf_item.bufnr > 0 and qf_item.lnum and qf_item.lnum > 0 then
             if not buffers_to_lines[qf_item.bufnr] then
                 buffers_to_lines[qf_item.bufnr] = {}
             end
-            -- Use a set to deduplicate line numbers
-            buffers_to_lines[qf_item.bufnr][qf_item.lnum] = true
+            table.insert(buffers_to_lines[qf_item.bufnr], qf_item.lnum)
         end
     end
 
-    -- Convert sets to sorted arrays
-    for bufnr, line_set in pairs(buffers_to_lines) do
-        local line_array = {}
-        for lnum, _ in pairs(line_set) do
-            table.insert(line_array, lnum)
-        end
-        table.sort(line_array) -- Sort for top-to-bottom processing
-        buffers_to_lines[bufnr] = line_array
-    end
-
-    -- Process each buffer
     for bufnr, line_numbers in pairs(buffers_to_lines) do
         if check_cancelled() then break end
 
         local filename = vim.fn.bufname(bufnr)
         local display_name = vim.fn.fnamemodify(filename, ":t")
 
-        smart_notify(string.format("🔄 Processing: %s (%d unique locations)", display_name, #line_numbers), vim.log.levels.INFO)
+        smart_notify(string.format("🔄 Processing: %s (%d locations)", display_name, #line_numbers), vim.log.levels.INFO)
 
         local ok = pcall(function()
-            -- Load buffer if not already loaded
             if not vim.fn.bufloaded(bufnr) then
                 vim.cmd('badd ' .. vim.fn.fnameescape(filename))
             end
             vim.cmd('buffer ' .. bufnr)
 
+            table.sort(line_numbers)
             local replacements_in_buf = 0
-            -- Process lines from top to bottom (already sorted)
             for _, lnum in ipairs(line_numbers) do
                 if check_cancelled() then break end
-                
                 local cmd = string.format('%ds%s%s%s%s%sgc', lnum, delimiter, pattern, delimiter, replace, delimiter)
                 if not params.flags.case_sensitive then
                     cmd = cmd .. 'i'
                 end
-                
-                -- More robust substitute output parsing with fallback
+                -- Count replacements by capturing :substitute output
                 local sub_output = vim.fn.execute(cmd)
-                local substitution_count = 0
-                
-                -- Try multiple patterns to handle localized output
-                local patterns = {
-                    '(%d+) substitutions?', -- English
-                    '(%d+) substitution', -- English singular
-                    '(%d+) remplacements?', -- French
-                    '(%d+) Ersetzungen?', -- German
-                    '(%d+) sustituciones?', -- Spanish
-                }
-                
-                for _, pattern_str in ipairs(patterns) do
-                    local count = tonumber(sub_output:match(pattern_str))
-                    if count then
-                        substitution_count = count
-                        break
-                    end
-                end
-                
-                replacements_in_buf = replacements_in_buf + substitution_count
+                local n = tonumber(sub_output:match('(%d+) substitutions')) or 0
+                replacements_in_buf = replacements_in_buf + n
             end
-            
-            -- Save the buffer after processing
             vim.cmd('write')
             total_replacements = total_replacements + replacements_in_buf
         end)
@@ -540,7 +422,6 @@ local function execute_quickfix_replace(params)
         end
     end
 
-    -- Restore original buffer and position
     pcall(function()
         if vim.fn.bufexists(original_buf) then
             vim.cmd('buffer ' .. original_buf)
@@ -558,11 +439,10 @@ local function execute_quickfix_replace(params)
     end
 end
 
--- Continuation function after input collection
+-- After Input
 function M._continue_refactor(scope, params)
     if check_cancelled() then return end
     
-    -- Build flag display string
     local flag_chars = {}
     if params.flags.case_sensitive then table.insert(flag_chars, "c") end
     if params.flags.whole_word then table.insert(flag_chars, "w") end
@@ -574,7 +454,6 @@ function M._continue_refactor(scope, params)
 
     smart_notify(string.format("🚀 Refactor [%s]: '%s' → '%s'", flag_str, params.find, params.replace), vim.log.levels.INFO)
 
-    -- Execute the refactor operation
     local success
     if scope == "quickfix" then
         success = execute_quickfix_replace(params)
@@ -582,7 +461,16 @@ function M._continue_refactor(scope, params)
         success = execute_buffer_replace(params)
     end
 
-    -- Schedule delayed summary notification
+    local function delayed_notify(msg, level)
+        -- Estimate reading time: 3 words per second
+        local word_count = 0
+        for _ in tostring(msg):gmatch("%S+") do word_count = word_count + 1 end
+        local delay_ms = math.max(2000, math.ceil(word_count / 3 * 1000))
+        vim.defer_fn(function()
+            smart_notify(msg, level)
+        end, delay_ms)
+    end
+
     if success then
         delayed_notify("🎉 Refactor completed successfully!", vim.log.levels.INFO)
     else
@@ -590,27 +478,21 @@ function M._continue_refactor(scope, params)
     end
 end
 
--- Main Refactor Function
+-- Main Refactor
 local function refactor(use_quickfix)
     local scope = use_quickfix and "quickfix" or "buffer"
+    -- ESC is handled by input()
     get_user_input(scope)
 end
 
--- Setup function with configuration options
 function M.setup(opts)
     opts = opts or {}
 
-    -- Configure default flags
     if opts.default_flags then
         config.default_flags = opts.default_flags
     end
-    
-    -- Configure minimum notification delay
-    if opts.min_notification_delay then
-        config.min_notification_delay = opts.min_notification_delay
-    end
 
-    -- Create user commands
+
     vim.api.nvim_create_user_command('Refactor', function()
         refactor(false)
     end, { desc = "Advanced Find and Replace in Current Buffer" })
@@ -623,7 +505,6 @@ function M.setup(opts)
         refactor(true)
     end, { desc = "Advanced Find and Replace in QuickFix List" })
 
-    -- Setup keymaps
     local keymap_opts = { silent = true, noremap = true }
     local base_keymap = opts.keymap or '<leader>r'
 
@@ -642,7 +523,7 @@ function M.setup(opts)
     smart_notify("🔧 Refactor Plugin Loaded!", vim.log.levels.INFO)
 end
 
--- Export public functions
+-- Export
 M.refactor = refactor
 M.refactor_buffer = function() refactor(false) end
 M.refactor_quickfix = function() refactor(true) end
