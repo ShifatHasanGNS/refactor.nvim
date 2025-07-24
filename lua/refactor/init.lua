@@ -1,22 +1,18 @@
 -- Refactor: Advanced Find & Replace Plugin Module for NeoVim
--- Version: 1.1.0
+-- Version: 0.1.1
 -- Author: Md. Shifat Hasan (ShifatHasanGNS)
 -- License: MIT
 
 local M = {}
 
--- Plugin configuration with sensible defaults
 local config = {
-    default_flags = "w",
-    default_quickfix_mode = "manual"
+    default_flags = "w"
 }
 
--- Global state for cancellation
 local refactor_state = {
     cancelled = false
 }
 
--- Enhanced notification with length management
 local function smart_notify(message, level, max_width)
     max_width = max_width or 80
     level = level or vim.log.levels.INFO
@@ -25,7 +21,7 @@ local function smart_notify(message, level, max_width)
         message = tostring(message)
     end
     
-    -- Split long messages into multiple notifications
+    -- Split Long Messages
     if #message > max_width then
         local lines = {}
         local current_line = ""
@@ -45,7 +41,7 @@ local function smart_notify(message, level, max_width)
             table.insert(lines, current_line)
         end
         
-        -- Show each line as separate notification with small delay
+        -- Notify Each Line With Delay
         for i, line in ipairs(lines) do
             vim.defer_fn(function()
                 vim.notify(line, level)
@@ -56,7 +52,7 @@ local function smart_notify(message, level, max_width)
     end
 end
 
--- Enhanced flag parsing with flexible order and optional flags
+-- Parse Flags: Flexible Order
 local function parse_flags(flag_str)
     if not flag_str then
         flag_str = ""
@@ -91,7 +87,7 @@ local function parse_flags(flag_str)
     return flags
 end
 
--- Enhanced pattern building with robust escaping
+-- Build Pattern: Escape & Validate
 local function build_search_pattern(find_str, flags)
     local pattern = find_str
 
@@ -123,7 +119,6 @@ local function build_search_pattern(find_str, flags)
     return pattern
 end
 
--- Enhanced replacement string escaping
 local function escape_replacement_string(replace_str, preserve_case)
     local single_line = replace_str:gsub('[\n\r]', '')
     if preserve_case then
@@ -135,7 +130,6 @@ local function escape_replacement_string(replace_str, preserve_case)
     end
 end
 
--- Advanced case preservation
 local function apply_case_preservation(original, replacement)
     if original == "" or replacement == "" then
         return replacement
@@ -169,19 +163,20 @@ local function apply_case_preservation(original, replacement)
     end
 end
 
+-- Global Wrapper-Function for 'apply_case_preservation' Function
 function _G.refactor_preserve_case_replace(original, replacement)
     return apply_case_preservation(original, replacement)
 end
 
--- Enhanced input function with ESC support and better UX
+-- Get Input: ESC Cancels
 local function get_input_with_esc(prompt, default)
     default = default or ""
     
-    -- Use inputsave/inputrestore to allow ESC to cancel input immediately
+    -- Allow ESC To Cancel
     vim.cmd('call inputsave()')
     local result = vim.fn.input(prompt, default)
     vim.cmd('call inputrestore()')
-    -- If user pressed ESC, input() returns empty string and typeahead buffer is cleared
+    -- ESC Returns 'nil'
     if result == nil or result == '' then
         if not refactor_state.cancelled then
             refactor_state.cancelled = true
@@ -192,7 +187,6 @@ local function get_input_with_esc(prompt, default)
     return result
 end
 
--- Check for cancellation
 local function check_cancelled()
     if refactor_state.cancelled then
         return true
@@ -200,7 +194,7 @@ local function check_cancelled()
     return false
 end
 
--- Enhanced buffer replace with smart delimiter selection
+-- Buffer Replace with Smart Delimiter
 local function execute_buffer_replace(params)
     if check_cancelled() then return false end
     
@@ -209,35 +203,33 @@ local function execute_buffer_replace(params)
     
     local replace = escape_replacement_string(params.replace, params.flags.preserve_case)
     
-    local delimiter = '/'
-    if pattern:find('/') or replace:find('/') then
-        local delim_options = {'#', '@', '|', '!', '%'}
-        for _, delim in ipairs(delim_options) do
-            if not pattern:find(vim.fn.escape(delim, '\\')) and not replace:find(vim.fn.escape(delim, '\\')) then
-                delimiter = delim
-                break
-            end
-        end
-        
-        if delimiter ~= '/' then
-            pattern = pattern:gsub('\\/', '/')
-            pattern = vim.fn.escape(pattern, delimiter)
-            
-            if not params.flags.preserve_case then
-                replace = replace:gsub('\\/', '/')
-                replace = vim.fn.escape(replace, delimiter)
-            end
+    -- Pick Safe Delimiter
+    local delim_options = {'/', '#', '@', '|', '!', '%', '~', ';', ':'}
+    local delimiter = nil
+    for _, delim in ipairs(delim_options) do
+        if not pattern:find(vim.pesc(delim)) and not replace:find(vim.pesc(delim)) then
+            delimiter = delim
+            break
         end
     end
-    
+    if not delimiter then
+        smart_notify("❌ Could not find a safe delimiter for substitution", vim.log.levels.ERROR)
+        return false
+    end
+    -- Escape For Delimiter
+    if delimiter ~= '/' then
+        pattern = pattern:gsub('\\/', '/')
+        pattern = vim.fn.escape(pattern, delimiter)
+        if not params.flags.preserve_case then
+            replace = replace:gsub('\\/', '/')
+            replace = vim.fn.escape(replace, delimiter)
+        end
+    end
     local cmd = '%s' .. delimiter .. pattern .. delimiter .. replace .. delimiter .. 'gc'
-    
     if not params.flags.case_sensitive then
-        cmd = cmd .. 'i'  
+        cmd = cmd .. 'i'
     end
-    
     smart_notify("🔍 Searching in: " .. vim.fn.expand('%:t'), vim.log.levels.INFO)
-    
     local ok, result = pcall(function() vim.cmd(cmd) end)
     if not ok then
         smart_notify("❌ Replace failed. Try different flags or check special characters", vim.log.levels.ERROR)
@@ -248,13 +240,13 @@ local function execute_buffer_replace(params)
     end
 end
 
--- Enhanced user input with ESC support
+-- Async Input
 local function get_user_input(scope, prefill_find)
-    refactor_state.cancelled = false  -- Reset cancellation state
+    refactor_state.cancelled = false  -- Reset Cancel
     
     vim.cmd('redraw')
     
-    -- Show help information in manageable chunks
+    -- Show Help Info
     smart_notify("🔧 Refactor: " .. (scope == "quickfix" and "Quickfix List" or "Current Buffer"), vim.log.levels.INFO)
     smart_notify("Press ESC at any input to cancel", vim.log.levels.INFO)
     
@@ -270,10 +262,10 @@ local function get_user_input(scope, prefill_find)
         smart_notify("Examples: 'cw'=Case+Whole, 'p'=Preserve only, ''=All defaults", vim.log.levels.INFO)
     end, 600)
     
-    -- Wait a bit for notifications to show
+    -- Wait For Notifications
     vim.defer_fn(function()
         if check_cancelled() then return end
-        -- Get flags input
+        -- Get Flags
         local flags_input = get_input_with_esc("Flags [c w r p]: ", config.default_flags)
         if check_cancelled() or not flags_input then return end
 
@@ -287,23 +279,6 @@ local function get_user_input(scope, prefill_find)
         table.insert(flag_display, flags.preserve_case and "Preserve-case" or "Normal-case")
         smart_notify("Active: " .. table.concat(flag_display, " | "), vim.log.levels.INFO)
 
-        local replace_mode = config.default_quickfix_mode
-        if scope == "quickfix" then
-            smart_notify("Modes: auto=fast+all-files, manual=precise+per-line", vim.log.levels.INFO)
-            local mode_input = get_input_with_esc("Replace Mode [auto/manual]: ", replace_mode)
-            if check_cancelled() or not mode_input then return end
-            if mode_input == "" then
-                smart_notify("🚫 No replace mode selected", vim.log.levels.INFO)
-                refactor_state.cancelled = true
-                return
-            end
-            if mode_input:lower():match("^m") then
-                replace_mode = "manual"
-            elseif mode_input:lower():match("^a") then
-                replace_mode = "auto"
-            end
-        end
-
         local find_str = get_input_with_esc("Find: ", prefill_find or "")
         if check_cancelled() or not find_str then return end
         if find_str == "" then
@@ -311,7 +286,6 @@ local function get_user_input(scope, prefill_find)
             refactor_state.cancelled = true
             return
         end
-        smart_notify("Find: '" .. find_str .. "'", vim.log.levels.INFO)
 
         local replace_str = get_input_with_esc("Replace: ", "")
         if check_cancelled() or not replace_str then return end
@@ -320,14 +294,12 @@ local function get_user_input(scope, prefill_find)
             refactor_state.cancelled = true
             return
         end
-        smart_notify("Replace: '" .. replace_str .. "'", vim.log.levels.INFO)
 
-        -- Continue with the refactor operation
+        -- Start Refactor
         local params = {
             flags = flags,
             find = find_str,
-            replace = replace_str,
-            replace_mode = replace_mode
+            replace = replace_str
         }
         vim.defer_fn(function()
             if not check_cancelled() then
@@ -336,11 +308,11 @@ local function get_user_input(scope, prefill_find)
         end, 100)
     end, 800)
     
-    return nil  -- Return nil since we're handling this asynchronously
+    return nil  -- Async
 end
 
--- Quickfix replace with auto mode
-local function execute_quickfix_replace_auto(params)
+
+local function execute_quickfix_replace(params)
     if check_cancelled() then return false end
     
     local qf_list = vim.fn.getqflist()
@@ -354,121 +326,33 @@ local function execute_quickfix_replace_auto(params)
     local pattern = build_search_pattern(params.find, params.flags)
     if not pattern then return false end
     
-    local replace = escape_replacement_string(params.replace, params.flags.preserve_case)
-    
-    local delimiter = '/'
-    if pattern:find('/') or replace:find('/') then
-        local delim_options = {'#', '@', '|', '!', '%'}
-        for _, delim in ipairs(delim_options) do
-            if not pattern:find(vim.fn.escape(delim, '\\')) and not replace:find(vim.fn.escape(delim, '\\')) then
-                delimiter = delim
-                break
-            end
-        end
-        
-        if delimiter ~= '/' then
-            pattern = pattern:gsub('\\/', '/')
-            pattern = vim.fn.escape(pattern, delimiter)
-            
-            if not params.flags.preserve_case then
-                replace = replace:gsub('\\/', '/')
-                replace = vim.fn.escape(replace, delimiter)
-            end
-        end
-    end
-    
-    smart_notify(string.format("⚡ AUTO MODE: Processing %d entries...", qf_count), vim.log.levels.INFO)
-    
-    local current_pos = vim.fn.getcurpos()
-    local current_buf = vim.fn.bufnr('%')
-    
-    local substitute_cmd = 's' .. delimiter .. pattern .. delimiter .. replace .. delimiter .. 'g'
-    if not params.flags.case_sensitive then
-        substitute_cmd = substitute_cmd .. 'i'
-    end
-    
-    local success_count = 0
-    
-    local ok, result = pcall(function()
-        vim.cmd('cfirst')
-        vim.cmd('cdo ' .. substitute_cmd)
-        vim.cmd('wall')
-        success_count = qf_count
-    end)
-    
-    if not ok then
-        smart_notify("⚡ Switching to individual processing...", vim.log.levels.INFO)
-        
-        success_count = 0
-        
-        for i = 1, qf_count do
-            if check_cancelled() then break end
-            
-            local entry_ok = pcall(function()
-                vim.cmd(i .. 'cc')
-                vim.cmd(substitute_cmd)
-                vim.cmd('write')
-                success_count = success_count + 1
-            end)
-            
-            if not entry_ok then
-                -- Continue processing other entries
-            end
-        end
-        
-        ok = success_count > 0
-    end
-    
-    pcall(function()
-        if vim.fn.bufexists(current_buf) then
-            vim.cmd('buffer ' .. current_buf)
-            vim.fn.setpos('.', current_pos)
-        end
-    end)
-    
-    if not ok or success_count == 0 then
-        smart_notify("❌ AUTO MODE failed", vim.log.levels.ERROR)
-        return false
-    else
-        local msg = success_count == qf_count and "✅ AUTO MODE: All entries processed" or 
-                    string.format("✅ AUTO MODE: %d/%d entries processed", success_count, qf_count)
-        smart_notify(msg, vim.log.levels.INFO)
-        vim.cmd('copen')
-        return true
-    end
-end
-
--- Quickfix replace with manual mode
-local function execute_quickfix_replace_manual(params)
-    if check_cancelled() then return false end
-    
-    local qf_list = vim.fn.getqflist()
-    local qf_count = #qf_list
-    
-    if qf_count == 0 then
-        smart_notify("📋 No quickfix entries found", vim.log.levels.WARN)
-        return false
-    end
-    
-    local pattern = build_search_pattern(params.find, params.flags)
-    if not pattern then return false end
-    
-    smart_notify(string.format("🔧 MANUAL MODE: Processing %d entries...", qf_count), vim.log.levels.INFO)
+    smart_notify(string.format("🔧 Processing %d quickfix entries...", qf_count), vim.log.levels.INFO)
     
     local success_count = 0
     
     local original_buf = vim.fn.bufnr('%')
     local original_pos = vim.fn.getcurpos()
     
-    local delimiter = '/'
+    -- Pick Safe Delimiter
+    local delim_options = {'/', '#', '@', '|', '!', '%', '~', ';', ':'}
+    local delimiter = nil
     local replace = escape_replacement_string(params.replace, params.flags.preserve_case)
-    if pattern:find('/') or replace:find('/') then
-        local delim_options = {'#', '@', '|', '!', '%'}
-        for _, delim in ipairs(delim_options) do
-            if not pattern:find(vim.fn.escape(delim, '\\')) and not replace:find(vim.fn.escape(delim, '\\')) then
-                delimiter = delim
-                break
-            end
+    for _, delim in ipairs(delim_options) do
+        if not pattern:find(vim.pesc(delim)) and not replace:find(vim.pesc(delim)) then
+            delimiter = delim
+            break
+        end
+    end
+    if not delimiter then
+        smart_notify("❌ Could not find a safe delimiter for substitution", vim.log.levels.ERROR)
+        return false
+    end
+    if delimiter ~= '/' then
+        pattern = pattern:gsub('\\/', '/')
+        pattern = vim.fn.escape(pattern, delimiter)
+        if not params.flags.preserve_case then
+            replace = replace:gsub('\\/', '/')
+            replace = vim.fn.escape(replace, delimiter)
         end
     end
     
@@ -507,13 +391,10 @@ local function execute_quickfix_replace_manual(params)
                 if not params.flags.case_sensitive then
                     cmd = cmd .. 'i'
                 end
-                
                 vim.fn.cursor(qf_item.lnum, 1)
-                
                 local line_ok = pcall(function()
                     vim.cmd(cmd)
                 end)
-                
                 if line_ok then
                     success_count = success_count + 1
                 end
@@ -537,32 +418,16 @@ local function execute_quickfix_replace_manual(params)
     end)
     
     if success_count > 0 then
-        smart_notify("✅ MANUAL: " .. success_count .. " entries processed", vim.log.levels.INFO)
+        smart_notify("✅ Quickfix: " .. success_count .. " entries processed", vim.log.levels.INFO)
         vim.cmd('copen')
         return true
     else
-        smart_notify("❌ MANUAL: No entries processed", vim.log.levels.ERROR)
+        smart_notify("❌ Quickfix: No entries processed", vim.log.levels.ERROR)
         return false
     end
 end
 
--- Quickfix replace dispatcher
-local function execute_quickfix_replace(params)
-    local mode = params.replace_mode or "auto"
-    
-    if mode == "manual" then
-        return execute_quickfix_replace_manual(params)
-    else
-        local success = execute_quickfix_replace_auto(params)
-        if not success then
-            smart_notify("🔄 AUTO failed, trying MANUAL...", vim.log.levels.WARN)
-            return execute_quickfix_replace_manual(params)
-        end
-        return success
-    end
-end
-
--- Continue refactor function (called after async input gathering)
+-- After Input
 function M._continue_refactor(scope, params)
     if check_cancelled() then return end
     
@@ -575,13 +440,7 @@ function M._continue_refactor(scope, params)
     local flag_str = table.concat(flag_chars, "")
     if flag_str == "" then flag_str = "none" end
 
-    local mode_info = ""
-    if scope == "quickfix" then
-        local mode_icon = params.replace_mode == "auto" and "⚡" or "🔧"
-        mode_info = string.format(" [%s %s]", mode_icon, params.replace_mode:upper())
-    end
-
-    smart_notify(string.format("🚀 Refactor%s [%s]: '%s' → '%s'", mode_info, flag_str, params.find, params.replace), vim.log.levels.INFO)
+    smart_notify(string.format("🚀 Refactor [%s]: '%s' → '%s'", flag_str, params.find, params.replace), vim.log.levels.INFO)
 
     local success
     if scope == "quickfix" then
@@ -597,24 +456,21 @@ function M._continue_refactor(scope, params)
     end
 end
 
--- Main refactor function
+-- Main Refactor
 local function refactor(use_quickfix, prefill_find)
     local scope = use_quickfix and "quickfix" or "buffer"
     
-    -- Start the input gathering process (ESC is handled by input())
+    -- ESC is handled by input()
     get_user_input(scope, prefill_find)
 end
 
--- Plugin setup function
 function M.setup(opts)
     opts = opts or {}
 
     if opts.default_flags then
         config.default_flags = opts.default_flags
     end
-    if opts.default_quickfix_mode then
-        config.default_quickfix_mode = opts.default_quickfix_mode
-    end
+
 
     vim.api.nvim_create_user_command('Refactor', function()
         refactor(false)
@@ -643,10 +499,10 @@ function M.setup(opts)
         refactor(true)
     end, vim.tbl_extend('force', keymap_opts, { desc = "📋 Refactor QuickFix List" }))
 
-    smart_notify("🔧 Refactor plugin loaded successfully!", vim.log.levels.INFO)
+    smart_notify("🔧 Refactor Plugin Loaded!", vim.log.levels.INFO)
 end
 
--- Export functions
+-- Export
 M.refactor = refactor
 M.refactor_buffer = function() refactor(false) end
 M.refactor_quickfix = function() refactor(true) end
