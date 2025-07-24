@@ -2,6 +2,8 @@
 
 **`refactor.nvim`** is a NeoVim plugin written in Lua that enhances your editing experience with advanced find and replace capabilities. Whether you need to refactor text in the current buffer or across multiple files via the quickfix list, this plugin offers a flexible and user-friendly solution with support for various matching options.
 
+![refactor-nvim-baby](./image/refactor-nvim-baby.png)
+
 ## Table of Contents
 
 - [Features](#features)
