@@ -1,9 +1,9 @@
 -- Refactor: Advanced Find & Replace Plugin Module for NeoVim
--- Version: 1.0.0
+-- Version: 1.0.1
 -- Author: Md. Shifat Hasan (ShifatHasanGNS)
 -- License: MIT
 
--- TODO: Need to Fix the 'QuickFix List' issue
+-- FIXED: QuickFix List issue resolved
 
 local M = {}
 
@@ -270,7 +270,7 @@ local function get_user_input(scope, prefill_find)
     }
 end
 
--- Quickfix replace with auto mode
+-- FIXED: Quickfix replace with auto mode
 local function execute_quickfix_replace_auto(params)
     local qf_list = vim.fn.getqflist()
     local qf_count = #qf_list
@@ -284,24 +284,39 @@ local function execute_quickfix_replace_auto(params)
     if not pattern then return false end
     
     local replace = escape_replacement_string(params.replace, params.flags.preserve_case)
-    local substitute_cmd = 's/' .. pattern .. '/' .. replace .. '/gc'
+    
+    -- Smart delimiter selection for substitute command
+    local delimiter = '/'
+    if pattern:find('/') or replace:find('/') then
+        local delim_options = {'#', '@', '|', '!', '%'}
+        for _, delim in ipairs(delim_options) do
+            if not pattern:find(vim.fn.escape(delim, '\\')) and not replace:find(vim.fn.escape(delim, '\\')) then
+                delimiter = delim
+                break
+            end
+        end
+    end
+    
+    local substitute_cmd = 's' .. delimiter .. pattern .. delimiter .. replace .. delimiter .. 'gc'
     
     if not params.flags.case_sensitive then
         substitute_cmd = substitute_cmd .. 'i'
     end
     
-    local cmd = 'cfdo ' .. substitute_cmd
-    
     vim.notify(string.format("⚡ AUTO MODE: Processing %d quickfix entries...", qf_count), vim.log.levels.INFO)
     
+    -- Save current state
     local current_pos = vim.fn.getcurpos()
     local current_buf = vim.fn.bufnr('%')
     
+    -- Use cdo instead of cfdo for better reliability
+    local cmd = 'cdo ' .. substitute_cmd .. ' | update'
+    
     local ok, result = pcall(function() 
-        vim.cmd('cfirst')
         vim.cmd(cmd)
     end)
     
+    -- Restore state
     pcall(function()
         if vim.fn.bufexists(current_buf) then
             vim.cmd('buffer ' .. current_buf)
@@ -319,7 +334,7 @@ local function execute_quickfix_replace_auto(params)
     end
 end
 
--- Quickfix replace with manual mode
+-- FIXED: Quickfix replace with manual mode
 local function execute_quickfix_replace_manual(params)
     local qf_list = vim.fn.getqflist()
     local qf_count = #qf_list
@@ -334,40 +349,89 @@ local function execute_quickfix_replace_manual(params)
     
     vim.notify(string.format("🔧 MANUAL MODE: Processing %d quickfix entries...", qf_count), vim.log.levels.INFO)
     
-    local processed_files = {}
     local success_count = 0
     local error_count = 0
     
     local original_buf = vim.fn.bufnr('%')
     local original_pos = vim.fn.getcurpos()
     
-    -- Process only the specific lines referenced by the quickfix list
-    for _, qf_item in ipairs(qf_list) do
-        if qf_item.bufnr and qf_item.bufnr > 0 and qf_item.lnum and qf_item.lnum > 0 then
-            local filename = vim.fn.bufname(qf_item.bufnr)
-            local display_name = vim.fn.fnamemodify(filename, ":t")
-            local replace = escape_replacement_string(params.replace, params.flags.preserve_case)
-            local preview = string.format("Line %d in %s: '%s' → '%s'", qf_item.lnum, display_name, params.find, params.replace)
-            vim.notify("🔄 Refactoring " .. preview, vim.log.levels.INFO)
-            local ok = pcall(function()
-                vim.cmd('buffer ' .. qf_item.bufnr)
-                local cmd = string.format("%ds/%s/%s/gc", qf_item.lnum, pattern, replace)
-                if not params.flags.case_sensitive then
-                    cmd = cmd .. 'i'
-                end
-                vim.cmd(cmd)
-                success_count = success_count + 1
-            end)
-            if not ok then
-                error_count = error_count + 1
-                vim.notify("❌ Failed to process " .. preview, vim.log.levels.ERROR)
-            else
-                vim.notify("✅ Success: " .. preview, vim.log.levels.INFO)
+    -- Smart delimiter selection
+    local delimiter = '/'
+    local replace = escape_replacement_string(params.replace, params.flags.preserve_case)
+    if pattern:find('/') or replace:find('/') then
+        local delim_options = {'#', '@', '|', '!', '%'}
+        for _, delim in ipairs(delim_options) do
+            if not pattern:find(vim.fn.escape(delim, '\\')) and not replace:find(vim.fn.escape(delim, '\\')) then
+                delimiter = delim
+                break
             end
         end
     end
     
-    -- Restore state
+    -- Group entries by buffer to process files efficiently
+    local buffers_to_process = {}
+    for _, qf_item in ipairs(qf_list) do
+        if qf_item.bufnr and qf_item.bufnr > 0 and qf_item.lnum and qf_item.lnum > 0 then
+            if not buffers_to_process[qf_item.bufnr] then
+                buffers_to_process[qf_item.bufnr] = {}
+            end
+            table.insert(buffers_to_process[qf_item.bufnr], qf_item)
+        end
+    end
+    
+    -- Process each buffer
+    for bufnr, items in pairs(buffers_to_process) do
+        local filename = vim.fn.bufname(bufnr)
+        local display_name = vim.fn.fnamemodify(filename, ":t")
+        
+        vim.notify(string.format("🔄 Processing file: %s (%d locations)", display_name, #items), vim.log.levels.INFO)
+        
+        local ok = pcall(function()
+            -- Load the buffer if not already loaded
+            if not vim.fn.bufloaded(bufnr) then
+                vim.cmd('badd ' .. vim.fn.fnameescape(filename))
+            end
+            
+            vim.cmd('buffer ' .. bufnr)
+            
+            -- Sort items by line number in descending order to avoid line number shifts
+            table.sort(items, function(a, b) return a.lnum > b.lnum end)
+            
+            -- Process each line in this buffer
+            for _, qf_item in ipairs(items) do
+                local cmd = string.format("%ds%s%s%s%s%sgc", 
+                    qf_item.lnum, delimiter, pattern, delimiter, replace, delimiter)
+                if not params.flags.case_sensitive then
+                    cmd = cmd .. 'i'
+                end
+                
+                -- Move to the specific line
+                vim.fn.cursor(qf_item.lnum, 1)
+                
+                local line_ok = pcall(function()
+                    vim.cmd(cmd)
+                end)
+                
+                if line_ok then
+                    success_count = success_count + 1
+                else
+                    error_count = error_count + 1
+                end
+            end
+            
+            -- Save the buffer
+            vim.cmd('write')
+        end)
+        
+        if not ok then
+            error_count = error_count + #items
+            vim.notify(string.format("❌ Failed to process file: %s", display_name), vim.log.levels.ERROR)
+        else
+            vim.notify(string.format("✅ Successfully processed: %s", display_name), vim.log.levels.INFO)
+        end
+    end
+    
+    -- Restore original state
     pcall(function()
         if vim.fn.bufexists(original_buf) then
             vim.cmd('buffer ' .. original_buf)
@@ -376,12 +440,12 @@ local function execute_quickfix_replace_manual(params)
     end)
     
     if success_count > 0 then
-        vim.notify(string.format("✅ MANUAL MODE: Processed %d buffers (%d errors)", 
+        vim.notify(string.format("✅ MANUAL MODE: Processed %d entries (%d errors)", 
             success_count, error_count), vim.log.levels.INFO)
         vim.cmd('copen')
         return true
     else
-        vim.notify("❌ MANUAL MODE: No buffers processed successfully", vim.log.levels.ERROR)
+        vim.notify("❌ MANUAL MODE: No entries processed successfully", vim.log.levels.ERROR)
         return false
     end
 end
