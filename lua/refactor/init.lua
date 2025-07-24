@@ -7,13 +7,6 @@ local M = {}
 
 -- Plugin configuration with sensible defaults
 local config = {
-    icons = {
-        case = { on = "🔤", off = "🔡" },
-        word = { on = "📝", off = "✏️" },
-        regex = { on = "🔧", off = "📄" },
-        preserve = { on = "🎨", off = "✨" }
-    },
-    max_selection_length = 200,
     default_flags = "w",
     default_quickfix_mode = "manual"
 }
@@ -25,7 +18,7 @@ local refactor_state = {
 
 -- Enhanced notification with length management
 local function smart_notify(message, level, max_width)
-    max_width = max_width or 80
+    max_width = max_width or 60
     level = level or vim.log.levels.INFO
     
     if type(message) ~= "string" then
@@ -184,29 +177,18 @@ end
 local function get_input_with_esc(prompt, default)
     default = default or ""
     
-    -- Set up temporary autocmd to catch Escape key
-    local input_cancelled = false
-    local group = vim.api.nvim_create_augroup("RefactorInput", { clear = true })
-    
-    vim.api.nvim_create_autocmd("CmdlineLeave", {
-        group = group,
-        callback = function()
-            vim.api.nvim_del_augroup_by_id(group)
-        end,
-    })
-    
-    -- Use inputdialog for better ESC handling
     local ok, result = pcall(function()
         return vim.fn.input(prompt, default)
     end)
     
-    -- Check if user pressed ESC (result would be empty and ok would be true, but we need to check the key)
     local key = vim.fn.getchar(0)  -- Non-blocking check
     if key == 27 then  -- ESC key code
-        input_cancelled = true
+        refactor_state.cancelled = true
+        smart_notify("🚫 Refactor cancelled by user", vim.log.levels.INFO)
+        return nil
     end
     
-    if not ok or input_cancelled then
+    if not ok then
         refactor_state.cancelled = true
         smart_notify("🚫 Refactor cancelled by user", vim.log.levels.INFO)
         return nil
@@ -275,13 +257,10 @@ end
 local function get_user_input(scope, prefill_find)
     refactor_state.cancelled = false  -- Reset cancellation state
     
-    local scope_icon = scope == "quickfix" and "📋" or "📄"
-    local scope_text = scope == "quickfix" and "Quickfix List" or "Current Buffer"
-
     vim.cmd('redraw')
     
     -- Show help information in manageable chunks
-    smart_notify("🔧 Refactor: " .. scope_text, vim.log.levels.INFO)
+    smart_notify("🔧 Refactor: " .. (scope == "quickfix" and "Quickfix List" or "Current Buffer"), vim.log.levels.INFO)
     smart_notify("Press ESC at any input to cancel", vim.log.levels.INFO)
     
     vim.defer_fn(function()
@@ -425,7 +404,6 @@ local function execute_quickfix_replace_auto(params)
     end
     
     local success_count = 0
-    local error_count = 0
     
     local ok, result = pcall(function()
         vim.cmd('cfirst')
@@ -438,7 +416,6 @@ local function execute_quickfix_replace_auto(params)
         smart_notify("⚡ Switching to individual processing...", vim.log.levels.INFO)
         
         success_count = 0
-        error_count = 0
         
         for i = 1, qf_count do
             if check_cancelled() then break end
@@ -451,7 +428,7 @@ local function execute_quickfix_replace_auto(params)
             end)
             
             if not entry_ok then
-                error_count = error_count + 1
+                -- Continue processing other entries
             end
         end
         
@@ -495,7 +472,6 @@ local function execute_quickfix_replace_manual(params)
     smart_notify(string.format("🔧 MANUAL MODE: Processing %d entries...", qf_count), vim.log.levels.INFO)
     
     local success_count = 0
-    local error_count = 0
     
     local original_buf = vim.fn.bufnr('%')
     local original_pos = vim.fn.getcurpos()
@@ -556,8 +532,6 @@ local function execute_quickfix_replace_manual(params)
                 
                 if line_ok then
                     success_count = success_count + 1
-                else
-                    error_count = error_count + 1
                 end
             end
             
@@ -565,7 +539,6 @@ local function execute_quickfix_replace_manual(params)
         end)
         
         if not ok then
-            error_count = error_count + #items
             smart_notify("❌ Failed: " .. display_name, vim.log.levels.ERROR)
         else
             smart_notify("✅ Success: " .. display_name, vim.log.levels.INFO)
@@ -580,8 +553,7 @@ local function execute_quickfix_replace_manual(params)
     end)
     
     if success_count > 0 then
-        smart_notify(string.format("✅ MANUAL: %d processed (%d errors)", 
-            success_count, error_count), vim.log.levels.INFO)
+        smart_notify("✅ MANUAL: " .. success_count .. " entries processed", vim.log.levels.INFO)
         vim.cmd('copen')
         return true
     else
@@ -681,12 +653,6 @@ end
 function M.setup(opts)
     opts = opts or {}
 
-    if opts.icons then
-        config.icons = vim.tbl_deep_extend("force", config.icons, opts.icons)
-    end
-    if opts.max_selection_length then
-        config.max_selection_length = opts.max_selection_length
-    end
     if opts.default_flags then
         config.default_flags = opts.default_flags
     end
