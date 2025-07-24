@@ -3,8 +3,6 @@
 -- Author: Md. Shifat Hasan (ShifatHasanGNS)
 -- License: MIT
 
--- FIXED: QuickFix List issue resolved
-
 local M = {}
 
 -- Plugin configuration with sensible defaults
@@ -210,7 +208,7 @@ local function get_user_input(scope, prefill_find)
     local scope_text = scope == "quickfix" and "Quickfix List" or "Current Buffer"
 
     vim.cmd('redraw')
-    vim.notify("Flag Format: [c][w][r][p] (any order, optional)", vim.log.levels.INFO)
+    vim.notify("Flag Format: [c w r p] (any order, optional)", vim.log.levels.INFO)
     vim.notify("c : Case Sensitive (default: insensitive)\nw : Whole Word Match (default: partial)\nr : RegEx Pattern (default: literal)\np : Preserve Case (default: don't preserve)", vim.log.levels.INFO)
     vim.notify("Examples:\n• 'cw' = Case-sensitive, Whole word\n• 'p' = Preserve case only\n• 'wr' = Whole word + RegEx\n• '' = All defaults (case-insens, partial, literal, no-preserve)", vim.log.levels.INFO)
     
