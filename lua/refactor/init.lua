@@ -54,36 +54,42 @@ end
 
 -- Parse Flags: Flexible Order
 local function parse_flags(flag_str)
-    if not flag_str then
-        flag_str = ""
-    end
-    
+    flag_str = flag_str or ""
     flag_str = vim.trim(flag_str):lower()
-    
+
     local valid_chars = { 'c', 'w', 'r', 'p' }
     local seen_chars = {}
-    
+
     for i = 1, #flag_str do
         local char = flag_str:sub(i, i)
         if not vim.tbl_contains(valid_chars, char) then
             smart_notify(string.format("❌ Invalid flag '%s'. Valid: c,w,r,p", char), vim.log.levels.ERROR)
             return nil
         end
-        
         if seen_chars[char] then
             smart_notify(string.format("❌ Duplicate flag '%s'", char), vim.log.levels.ERROR)
             return nil
         end
         seen_chars[char] = true
     end
-    
+
+    -- Default: Case-insensitive, Partial-match, Literal-text, Normal-case
     local flags = {
         case_sensitive = flag_str:find('c') ~= nil,
         whole_word = flag_str:find('w') ~= nil,
         use_regex = flag_str:find('r') ~= nil,
         preserve_case = flag_str:find('p') ~= nil
     }
-    
+
+    if flag_str == "" then
+        flags = {
+            case_sensitive = false,
+            whole_word = false,
+            use_regex = false,
+            preserve_case = false
+        }
+    end
+
     return flags
 end
 
@@ -267,7 +273,10 @@ local function get_user_input(scope, prefill_find)
         if check_cancelled() then return end
         -- Get Flags
         local flags_input = get_input_with_esc("Flags [c w r p]: ", config.default_flags)
-        if check_cancelled() or not flags_input then return end
+
+        if check_cancelled() then return end
+        -- Only cancel if user pressed ESC (flags_input == nil), not for blank string
+        if flags_input == nil then return end
 
         local flags = parse_flags(flags_input)
         if check_cancelled() or not flags then return end
