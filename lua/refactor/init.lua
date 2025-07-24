@@ -295,12 +295,17 @@ local function execute_quickfix_replace_auto(params)
                 break
             end
         end
-    end
-    
-    local substitute_cmd = 's' .. delimiter .. pattern .. delimiter .. replace .. delimiter .. 'gc'
-    
-    if not params.flags.case_sensitive then
-        substitute_cmd = substitute_cmd .. 'i'
+        
+        -- Re-escape for new delimiter if needed
+        if delimiter ~= '/' then
+            pattern = pattern:gsub('\\/', '/')
+            pattern = vim.fn.escape(pattern, delimiter)
+            
+            if not params.flags.preserve_case then
+                replace = replace:gsub('\\/', '/')
+                replace = vim.fn.escape(replace, delimiter)
+            end
+        end
     end
     
     vim.notify(string.format("⚡ AUTO MODE: Processing %d quickfix entries...", qf_count), vim.log.levels.INFO)
@@ -309,12 +314,51 @@ local function execute_quickfix_replace_auto(params)
     local current_pos = vim.fn.getcurpos()
     local current_buf = vim.fn.bufnr('%')
     
-    -- Use cdo instead of cfdo for better reliability
-    local cmd = 'cdo ' .. substitute_cmd .. ' | update'
+    -- Build substitute command with proper flags
+    local substitute_cmd = 's' .. delimiter .. pattern .. delimiter .. replace .. delimiter .. 'g'
+    if not params.flags.case_sensitive then
+        substitute_cmd = substitute_cmd .. 'i'
+    end
     
-    local ok, result = pcall(function() 
-        vim.cmd(cmd)
+    local success_count = 0
+    local error_count = 0
+    
+    -- Process each quickfix entry individually for better control
+    local ok, result = pcall(function()
+        -- Go to first quickfix entry
+        vim.cmd('cfirst')
+        
+        -- Use cdo to execute command on each quickfix entry
+        vim.cmd('cdo ' .. substitute_cmd)
+        
+        -- Save all modified buffers
+        vim.cmd('wall')
+        
+        success_count = qf_count
     end)
+    
+    -- Alternative approach if cdo fails - process manually
+    if not ok then
+        vim.notify("⚡ Switching to individual entry processing...", vim.log.levels.INFO)
+        
+        success_count = 0
+        error_count = 0
+        
+        for i = 1, qf_count do
+            local entry_ok = pcall(function()
+                vim.cmd(i .. 'cc')  -- Go to i-th quickfix entry
+                vim.cmd(substitute_cmd)
+                vim.cmd('write')
+                success_count = success_count + 1
+            end)
+            
+            if not entry_ok then
+                error_count = error_count + 1
+            end
+        end
+        
+        ok = success_count > 0
+    end
     
     -- Restore state
     pcall(function()
@@ -324,11 +368,13 @@ local function execute_quickfix_replace_auto(params)
         end
     end)
     
-    if not ok then
+    if not ok or success_count == 0 then
         vim.notify("❌ AUTO MODE failed: " .. tostring(result), vim.log.levels.ERROR)
         return false
     else
-        vim.notify("✅ AUTO MODE: Quickfix replace completed", vim.log.levels.INFO)
+        local msg = success_count == qf_count and "✅ AUTO MODE: All entries processed" or 
+                    string.format("✅ AUTO MODE: %d/%d entries processed", success_count, qf_count)
+        vim.notify(msg, vim.log.levels.INFO)
         vim.cmd('copen')
         return true
     end
