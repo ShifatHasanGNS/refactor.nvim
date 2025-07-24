@@ -314,14 +314,14 @@ local function get_user_input(scope)
             find = find_str,
             replace = replace_str or ""  -- Ensure it’s a string
         }
-        vim.defer_fn(function()
-            if not check_cancelled() then
-                M._continue_refactor(scope, params)
-            end
-        end, 100)
+        -- vim.defer_fn(function()
+        --     if not check_cancelled() then
+        --         M._continue_refactor(scope, params)
+        --     end
+        -- end, 100)
     -- end, 800)
 
-    return nil  -- Asynchronous operation
+    return params  -- Asynchronous operation
 end
 
 local function execute_quickfix_replace(params)
