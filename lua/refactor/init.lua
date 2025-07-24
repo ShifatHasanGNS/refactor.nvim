@@ -247,7 +247,7 @@ local function execute_buffer_replace(params)
 end
 
 -- Async Input
-local function get_user_input(scope, prefill_find)
+local function get_user_input(scope)
     refactor_state.cancelled = false  -- Reset Cancel
     
     vim.cmd('redraw')
@@ -289,8 +289,8 @@ local function get_user_input(scope, prefill_find)
         table.insert(flag_display, flags.preserve_case and "Preserve-case" or "Normal-case")
         smart_notify("Active: " .. table.concat(flag_display, " | "), vim.log.levels.INFO)
 
-        local find_str = get_input_with_esc("Find: ", prefill_find or "")
-        if check_cancelled() or not find_str then return end
+        local find_str = get_input_with_esc("Find: ", "")
+        if check_cancelled() or find_str == nil then return end
         if find_str == "" then
             smart_notify("🚫 No find string entered", vim.log.levels.INFO)
             refactor_state.cancelled = true
@@ -298,12 +298,8 @@ local function get_user_input(scope, prefill_find)
         end
 
         local replace_str = get_input_with_esc("Replace: ", "")
-        if check_cancelled() or not replace_str then return end
-        if replace_str == "" then
-            smart_notify("🚫 No replace string entered", vim.log.levels.INFO)
-            refactor_state.cancelled = true
-            return
-        end
+        if check_cancelled() or replace_str == nil then return end
+        -- Note: empty string for replace_str is valid (replace with empty string)
 
         -- Start Refactor
         local params = {
@@ -467,11 +463,10 @@ function M._continue_refactor(scope, params)
 end
 
 -- Main Refactor
-local function refactor(use_quickfix, prefill_find)
+local function refactor(use_quickfix)
     local scope = use_quickfix and "quickfix" or "buffer"
-    
     -- ESC is handled by input()
-    get_user_input(scope, prefill_find)
+    get_user_input(scope)
 end
 
 function M.setup(opts)
