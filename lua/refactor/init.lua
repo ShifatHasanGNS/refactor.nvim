@@ -62,6 +62,8 @@ end
 
 -- Parse Flags: Flexible Order
 local function parse_flags(flag_str)
+    if check_cancelled() or flag_str == nil then return nil end
+
     flag_str = flag_str or ""
     flag_str = vim.trim(flag_str):lower()
 
@@ -97,8 +99,6 @@ local function parse_flags(flag_str)
             preserve_case = false
         }
     end
-
-    if check_cancelled() then return nil end
 
     return flags
 end
@@ -284,7 +284,7 @@ local function get_user_input(scope)
         -- Get flags (empty input means use default flags)
         local flags_input = get_input_with_esc("Flags [c w r p]: ", config.default_flags, "flag")
         if flags_input == nil then return end  -- Cancelled
-        local flags = parse_flags(flags_input or "")
+        local flags = parse_flags(flags_input)
 
         if check_cancelled() or flags == nil then return end
 
