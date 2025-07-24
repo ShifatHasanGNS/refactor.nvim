@@ -281,7 +281,10 @@ local function get_user_input(scope)
     vim.defer_fn(function()
         -- Get flags (empty input means use default flags)
         local flags_input = get_input_with_esc("Flags [c w r p]: ", config.default_flags, "flag")
-        if flags_input == nil then exit(0) end  -- Cancelled
+        if flags_input == nil then
+            smart_notify("🚫 Operation Cancelled\ndue to ESC", vim.log.levels.INFO)
+            exit(0)
+            end  -- Cancelled
         local flags = parse_flags(flags_input or "")
 
         if check_cancelled() or flags == nil then return end
