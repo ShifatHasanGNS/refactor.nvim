@@ -178,7 +178,7 @@ end
 -- Get Input: ESC Cancels, with mode for input type (required)
 -- mode: "flag", "find", "replace" (must be specified)
 local function get_input_with_esc(prompt, default, mode)
-    assert(mode == "flag" or mode == "find" or mode == "replace", "get_input_with_esc: mode must be 'flag', 'find', or 'replace'")
+    assert(mode == "flag" or mode == "find" or mode == "replace" or mode == "confirm", "Invalid mode")
     default = default or ""
 
     vim.cmd('call inputsave()')
@@ -186,22 +186,17 @@ local function get_input_with_esc(prompt, default, mode)
     vim.cmd('call inputrestore()')
 
     if result == nil then
-        if not refactor_state.cancelled then
-            refactor_state.cancelled = true
-            smart_notify("🚫 Operation Cancelled", vim.log.levels.INFO)
-        end
+        -- This case shouldn’t normally happen with vim.fn.input, but we’ll handle it
+        refactor_state.cancelled = true
+        smart_notify("🚫 Operation Cancelled", vim.log.levels.INFO)
         return nil
     end
 
-    if result == '' then
-        if mode == "find" or mode == "flag" then  -- Cancel for both "find" and "flag"
-            smart_notify("🚫 Operation Cancelled", vim.log.levels.INFO)
-            refactor_state.cancelled = true
-            return nil
-        else
-            -- For "replace", empty string is valid
-            return ""
-        end
+    if mode == "find" and result == '' then
+        -- Cancel if no find string is provided
+        smart_notify("🚫 No Find String was Entered", vim.log.levels.INFO)
+        refactor_state.cancelled = true
+        return nil
     end
 
     return result
@@ -284,12 +279,10 @@ local function get_user_input(scope)
     
     -- Wait For Notifications
     vim.defer_fn(function()
-        if check_cancelled() then return end
+        -- Get flags (empty input means use default flags)
         local flags_input = get_input_with_esc("Flags [c w r p]: ", config.default_flags, "flag")
-        if check_cancelled() or flags_input == nil then return end
-        if flags_input == nil then flags_input = "" end
-
-        local flags = parse_flags(flags_input)
+        if flags_input == nil then return end  -- Cancelled
+        local flags = parse_flags(flags_input or "")
         if check_cancelled() or not flags then return end
 
         local flag_display = {}
@@ -299,21 +292,26 @@ local function get_user_input(scope)
         table.insert(flag_display, flags.preserve_case and "Preserve-case" or "Normal-case")
         smart_notify("Active: " .. table.concat(flag_display, " | "), vim.log.levels.INFO)
 
+        -- Get find string (required)
         local find_str = get_input_with_esc("Find: ", "", "find")
-        if check_cancelled() or find_str == nil then return end
+        if find_str == nil then return end  -- Cancelled due to empty input
 
+        -- Get replace string (empty is allowed)
         local replace_str = get_input_with_esc("Replace: ", "", "replace")
-        if check_cancelled() or replace_str == nil then return end
-        -- Note: empty string for replace_str is valid (replace with empty string)
+        if replace_str == nil then return end  -- Cancelled
 
-        -- Confirmation prompt
-        local confirm = get_input_with_esc("Proceed? [Y/n]: ", "Y", "flag")  -- Reuse "flag" mode for cancellation
-        if check_cancelled() or confirm == nil or confirm:lower() == "n" then return end
+        -- Confirmation step
+        local confirm = get_input_with_esc("Proceed with these settings? [Y/n]: ", "Y", "confirm")
+        if confirm == nil or confirm:lower() == "n" then
+            smart_notify("🚫 Operation Cancelled", vim.log.levels.INFO)
+            return
+        end
 
+        -- Prepare parameters and proceed
         local params = {
             flags = flags,
             find = find_str,
-            replace = replace_str
+            replace = replace_str or ""  -- Ensure it’s a string
         }
         vim.defer_fn(function()
             if not check_cancelled() then
@@ -321,8 +319,8 @@ local function get_user_input(scope)
             end
         end, 100)
     end, 800)
-    
-    return nil
+
+    return nil  -- Asynchronous operation
 end
 
 local function execute_quickfix_replace(params)
