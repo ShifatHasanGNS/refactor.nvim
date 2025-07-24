@@ -6,7 +6,8 @@
 local M = {}
 
 local config = {
-    default_flags = "w"
+    default_flags = "",
+    -- Case-insensitive, Partial-match, Literal-text, Normal-case
 }
 
 local refactor_state = {
@@ -174,22 +175,35 @@ function _G.refactor_preserve_case_replace(original, replacement)
     return apply_case_preservation(original, replacement)
 end
 
--- Get Input: ESC Cancels
-local function get_input_with_esc(prompt, default)
+-- Get Input: ESC Cancels, with mode for input type (required)
+-- mode: "flag", "find", "replace" (must be specified)
+local function get_input_with_esc(prompt, default, mode)
+    assert(mode == "flag" or mode == "find" or mode == "replace", "get_input_with_esc: mode must be 'flag', 'find', or 'replace'")
     default = default or ""
-    
-    -- Allow ESC To Cancel
+
     vim.cmd('call inputsave()')
     local result = vim.fn.input(prompt, default)
     vim.cmd('call inputrestore()')
-    -- ESC Returns 'nil'
-    if result == nil or result == '' then
+
+    if result == nil then
         if not refactor_state.cancelled then
             refactor_state.cancelled = true
             smart_notify("🚫 Refactor cancelled by user (ESC)", vim.log.levels.INFO)
         end
         return nil
     end
+
+    if result == '' then
+        if mode == "find" then
+            smart_notify("🚫 No find string entered", vim.log.levels.INFO)
+            refactor_state.cancelled = true
+            return nil
+        else
+            -- For flag and replace, empty string is valid
+            return ""
+        end
+    end
+
     return result
 end
 
@@ -272,7 +286,7 @@ local function get_user_input(scope)
     vim.defer_fn(function()
         if check_cancelled() then return end
         -- Get Flags
-        local flags_input = get_input_with_esc("Flags [c w r p]: ", config.default_flags)
+        local flags_input = get_input_with_esc("Flags [c w r p]: ", config.default_flags, "flag")
 
 
         if check_cancelled() then return end
@@ -289,15 +303,10 @@ local function get_user_input(scope)
         table.insert(flag_display, flags.preserve_case and "Preserve-case" or "Normal-case")
         smart_notify("Active: " .. table.concat(flag_display, " | "), vim.log.levels.INFO)
 
-        local find_str = get_input_with_esc("Find: ", "")
+        local find_str = get_input_with_esc("Find: ", "", "find")
         if check_cancelled() or find_str == nil then return end
-        if find_str == "" then
-            smart_notify("🚫 No find string entered", vim.log.levels.INFO)
-            refactor_state.cancelled = true
-            return
-        end
 
-        local replace_str = get_input_with_esc("Replace: ", "")
+        local replace_str = get_input_with_esc("Replace: ", "", "replace")
         if check_cancelled() or replace_str == nil then return end
         -- Note: empty string for replace_str is valid (replace with empty string)
 
