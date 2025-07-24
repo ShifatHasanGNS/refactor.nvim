@@ -188,14 +188,14 @@ local function get_input_with_esc(prompt, default, mode)
     if result == nil then
         if not refactor_state.cancelled then
             refactor_state.cancelled = true
-            smart_notify("🚫 Refactor cancelled by user (ESC)", vim.log.levels.INFO)
+            smart_notify("🚫 Operation Cancelled", vim.log.levels.INFO)
         end
         return nil
     end
 
     if result == '' then
         if mode == "find" then
-            smart_notify("🚫 No find string entered", vim.log.levels.INFO)
+            smart_notify("🚫 No Find String was Entered", vim.log.levels.INFO)
             refactor_state.cancelled = true
             return nil
         else
@@ -287,7 +287,6 @@ local function get_user_input(scope)
         if check_cancelled() then return end
         -- Get Flags
         local flags_input = get_input_with_esc("Flags [c w r p]: ", config.default_flags, "flag")
-
 
         if check_cancelled() then return end
         -- Treat nil as empty string (default flags)
@@ -493,15 +492,11 @@ function M.setup(opts)
     end
 
 
-    vim.api.nvim_create_user_command('Refactor', function()
+    vim.api.nvim_create_user_command('RefactorB', function()
         refactor(false)
     end, { desc = "Advanced Find and Replace in Current Buffer" })
 
-    vim.api.nvim_create_user_command('RefactorQF', function()
-        refactor(true)
-    end, { desc = "Advanced Find and Replace in QuickFix List" })
-
-    vim.api.nvim_create_user_command('RefactorQuickFix', function()
+    vim.api.nvim_create_user_command('RefactorQ', function()
         refactor(true)
     end, { desc = "Advanced Find and Replace in QuickFix List" })
 
@@ -509,7 +504,7 @@ function M.setup(opts)
     local base_keymap = opts.keymap or '<leader>r'
 
     vim.keymap.set('n', base_keymap, function()
-        refactor(false)
+        -- refactor(false)
     end, vim.tbl_extend('force', keymap_opts, { desc = "🔧 Refactor (Find & Replace)" }))
 
     vim.keymap.set('n', base_keymap .. 'b', function()
