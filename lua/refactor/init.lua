@@ -245,7 +245,7 @@ local function get_input_with_esc(prompt, default, mode)
         return nil
     end
 
-    if mode == "find" and (result == nil or result == "") then
+    if mode == "find" and result == "" then
         -- Cancel if no find string is provided
         smart_notify("🚫 No Find String was Entered", vim.log.levels.INFO)
         refactor_state.cancelled = true
