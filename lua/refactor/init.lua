@@ -286,6 +286,13 @@ local function get_user_input(scope)
 
         if check_cancelled() or flags == nil then return end
 
+        -- Confirmation step
+        local confirm = get_input_with_esc("Proceed to Refactor? [y/n]: ", "y", "confirm")
+        if confirm == nil or confirm:lower() == "n" then
+            smart_notify("🚫 Operation Cancelled", vim.log.levels.INFO)
+            return
+        end
+
         local flag_display = {}
         table.insert(flag_display, flags.case_sensitive and "Case-sensitive" or "Case-insensitive")
         table.insert(flag_display, flags.whole_word and "Whole-word" or "Partial-match")
@@ -296,6 +303,13 @@ local function get_user_input(scope)
         -- Get find string (required)
         local find_str = get_input_with_esc("Find: ", "", "find")
         if check_cancelled() or find_str == nil then return end
+
+        -- Confirmation step
+        local confirm = get_input_with_esc("Proceed to Refactor? [y/n]: ", "y", "confirm")
+        if confirm == nil or confirm:lower() == "n" then
+            smart_notify("🚫 Operation Cancelled", vim.log.levels.INFO)
+            return
+        end
 
         -- Get replace string (empty is allowed)
         local replace_str = get_input_with_esc("Replace: ", "", "replace")
