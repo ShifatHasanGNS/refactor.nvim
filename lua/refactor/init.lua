@@ -247,7 +247,7 @@ local function get_input_with_esc(prompt, default, mode)
 
     if mode == "find" and result == "" then
         -- Cancel if no find string is provided
-        smart_notify("🚫 No Find String was Entered", vim.log.levels.INFO)
+        smart_notify("🚫 Operation Cancelled\nNo Find String was Entered", vim.log.levels.INFO)
         refactor_state.cancelled = true
         return nil
     end
@@ -281,10 +281,7 @@ local function get_user_input(scope)
     vim.defer_fn(function()
         -- Get flags (empty input means use default flags)
         local flags_input = get_input_with_esc("Flags [c w r p]: ", config.default_flags, "flag")
-        if flags_input == nil then
-            smart_notify("🚫 Operation Cancelled\ndue to ESC", vim.log.levels.INFO)
-            exit(0)
-            end  -- Cancelled
+        if flags_input == nil then return end  -- Cancelled
         local flags = parse_flags(flags_input or "")
 
         if check_cancelled() or flags == nil then return end
@@ -298,17 +295,11 @@ local function get_user_input(scope)
 
         -- Get find string (required)
         local find_str = get_input_with_esc("Find: ", "", "find")
-        if check_cancelled() or find_str == nil then
-            smart_notify("🚫 Operation Cancelled\ndue to ESC or Empty Find String", vim.log.levels.INFO)
-            return
-        end
+        if check_cancelled() or find_str == nil then return end
 
         -- Get replace string (empty is allowed)
         local replace_str = get_input_with_esc("Replace: ", "", "replace")
-        if check_cancelled() or replace_str == nil then
-            smart_notify("🚫 Operation Cancelled\ndue to ESC", vim.log.levels.INFO)
-            return
-        end
+        if check_cancelled() or replace_str == nil then return end
 
         -- Confirmation step
         local confirm = get_input_with_esc("Proceed to Refactor? [y/n]: ", "y", "confirm")
