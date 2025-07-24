@@ -242,14 +242,14 @@ local function get_input_with_esc(prompt, default, mode)
         -- This case shouldn’t normally happen with vim.fn.input, but we’ll handle it
         refactor_state.cancelled = true
         smart_notify("🚫 Operation Cancelled\ndue to ESC or Inavlid Input", vim.log.levels.INFO)
-        exit(0)
+        return nil
     end
 
     if mode == "find" and result == "" then
         -- Cancel if no find string is provided
         smart_notify("🚫 Operation Cancelled\nNo Find String was Entered", vim.log.levels.INFO)
         refactor_state.cancelled = true
-        exit(0)
+        return nil
     end
 
     return result
@@ -278,7 +278,7 @@ local function get_user_input(scope)
     end, 600)
     
     -- Wait For Notifications
-    vim.defer_fn(function()
+    -- vim.defer_fn(function()
         -- Get flags (empty input means use default flags)
         local flags_input = get_input_with_esc("Flags [c w r p]: ", config.default_flags, "flag")
         if flags_input == nil then return end  -- Cancelled
@@ -319,7 +319,7 @@ local function get_user_input(scope)
                 M._continue_refactor(scope, params)
             end
         end, 100)
-    end, 800)
+    -- end, 800)
 
     return nil  -- Asynchronous operation
 end
