@@ -177,23 +177,18 @@ end
 local function get_input_with_esc(prompt, default)
     default = default or ""
     
-    local ok, result = pcall(function()
-        return vim.fn.input(prompt, default)
-    end)
-    
-    local key = vim.fn.getchar(0)  -- Non-blocking check
-    if key == 27 then  -- ESC key code
-        refactor_state.cancelled = true
-        smart_notify("🚫 Refactor cancelled by user", vim.log.levels.INFO)
+    -- Use inputsave/inputrestore to allow ESC to cancel input immediately
+    vim.cmd('call inputsave()')
+    local result = vim.fn.input(prompt, default)
+    vim.cmd('call inputrestore()')
+    -- If user pressed ESC, input() returns empty string and typeahead buffer is cleared
+    if result == nil or result == '' then
+        if not refactor_state.cancelled then
+            refactor_state.cancelled = true
+            smart_notify("🚫 Refactor cancelled by user (ESC)", vim.log.levels.INFO)
+        end
         return nil
     end
-    
-    if not ok then
-        refactor_state.cancelled = true
-        smart_notify("🚫 Refactor cancelled by user", vim.log.levels.INFO)
-        return nil
-    end
-    
     return result
 end
 
@@ -277,23 +272,19 @@ local function get_user_input(scope, prefill_find)
     
     -- Wait a bit for notifications to show
     vim.defer_fn(function()
+        if check_cancelled() then return end
         -- Get flags input
         local flags_input = get_input_with_esc("Flags [c w r p]: ", config.default_flags)
         if check_cancelled() or not flags_input then return end
-        
+
         local flags = parse_flags(flags_input)
-        if not flags then
-            refactor_state.cancelled = true
-            return
-        end
-        
-        -- Build and show flag display
+        if check_cancelled() or not flags then return end
+
         local flag_display = {}
         table.insert(flag_display, flags.case_sensitive and "Case-sensitive" or "Case-insensitive")
         table.insert(flag_display, flags.whole_word and "Whole-word" or "Partial-match")
         table.insert(flag_display, flags.use_regex and "RegEx" or "Literal-text")
         table.insert(flag_display, flags.preserve_case and "Preserve-case" or "Normal-case")
-        
         smart_notify("Active: " .. table.concat(flag_display, " | "), vim.log.levels.INFO)
 
         local replace_mode = config.default_quickfix_mode
@@ -301,13 +292,11 @@ local function get_user_input(scope, prefill_find)
             smart_notify("Modes: auto=fast+all-files, manual=precise+per-line", vim.log.levels.INFO)
             local mode_input = get_input_with_esc("Replace Mode [auto/manual]: ", replace_mode)
             if check_cancelled() or not mode_input then return end
-            
             if mode_input == "" then
                 smart_notify("🚫 No replace mode selected", vim.log.levels.INFO)
                 refactor_state.cancelled = true
                 return
             end
-            
             if mode_input:lower():match("^m") then
                 replace_mode = "manual"
             elseif mode_input:lower():match("^a") then
@@ -317,24 +306,20 @@ local function get_user_input(scope, prefill_find)
 
         local find_str = get_input_with_esc("Find: ", prefill_find or "")
         if check_cancelled() or not find_str then return end
-        
         if find_str == "" then
             smart_notify("🚫 No find string entered", vim.log.levels.INFO)
             refactor_state.cancelled = true
             return
         end
-        
         smart_notify("Find: '" .. find_str .. "'", vim.log.levels.INFO)
-        
+
         local replace_str = get_input_with_esc("Replace: ", "")
         if check_cancelled() or not replace_str then return end
-        
         if replace_str == "" then
             smart_notify("🚫 No replace string entered", vim.log.levels.INFO)
             refactor_state.cancelled = true
             return
         end
-        
         smart_notify("Replace: '" .. replace_str .. "'", vim.log.levels.INFO)
 
         -- Continue with the refactor operation
@@ -344,12 +329,11 @@ local function get_user_input(scope, prefill_find)
             replace = replace_str,
             replace_mode = replace_mode
         }
-        
-        -- Execute the actual refactor
         vim.defer_fn(function()
-            M._continue_refactor(scope, params)
+            if not check_cancelled() then
+                M._continue_refactor(scope, params)
+            end
         end, 100)
-        
     end, 800)
     
     return nil  -- Return nil since we're handling this asynchronously
@@ -617,36 +601,8 @@ end
 local function refactor(use_quickfix, prefill_find)
     local scope = use_quickfix and "quickfix" or "buffer"
     
-    -- Set up ESC key handler for the entire refactor process
-    local original_esc_map = vim.fn.maparg('<Esc>', 'n', false, true)
-    
-    vim.keymap.set('n', '<Esc>', function()
-        refactor_state.cancelled = true
-        smart_notify("🚫 Refactor cancelled (ESC pressed)", vim.log.levels.INFO)
-        
-        -- Restore original ESC mapping
-        if original_esc_map and original_esc_map.callback then
-            vim.keymap.set('n', '<Esc>', original_esc_map.callback, { silent = true })
-        elseif original_esc_map and original_esc_map.rhs then
-            vim.keymap.set('n', '<Esc>', original_esc_map.rhs, { silent = true })
-        else
-            vim.keymap.del('n', '<Esc>')
-        end
-    end, { silent = true, desc = "Cancel Refactor" })
-    
-    -- Start the input gathering process
+    -- Start the input gathering process (ESC is handled by input())
     get_user_input(scope, prefill_find)
-    
-    -- Clean up ESC handler after a reasonable timeout
-    vim.defer_fn(function()
-        if original_esc_map and original_esc_map.callback then
-            vim.keymap.set('n', '<Esc>', original_esc_map.callback, { silent = true })
-        elseif original_esc_map and original_esc_map.rhs then
-            vim.keymap.set('n', '<Esc>', original_esc_map.rhs, { silent = true })
-        else
-            pcall(vim.keymap.del, 'n', '<Esc>')
-        end
-    end, 30000)  -- 30 second timeout
 end
 
 -- Plugin setup function
