@@ -274,9 +274,10 @@ local function get_user_input(scope, prefill_find)
         -- Get Flags
         local flags_input = get_input_with_esc("Flags [c w r p]: ", config.default_flags)
 
+
         if check_cancelled() then return end
-        -- Only cancel if user pressed ESC (flags_input == nil), not for blank string
-        if flags_input == nil then return end
+        -- Treat nil as empty string (default flags)
+        if flags_input == nil then flags_input = "" end
 
         local flags = parse_flags(flags_input)
         if check_cancelled() or not flags then return end
