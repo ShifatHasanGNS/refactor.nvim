@@ -1,300 +1,157 @@
-# 🔧 refactor.nvim
+# `refactor.nvim`
 
-**The most intuitive and powerful find & replace plugin for Neovim**
+**`refactor.nvim`** is a NeoVim plugin written in Lua that enhances your editing experience with advanced find and replace capabilities. Whether you need to refactor text in the current buffer or across multiple files via the quickfix list, this plugin offers a flexible and user-friendly solution with support for various matching options.
 
-Transform your refactoring workflow with smart 4-letter flags, beautiful UX, and rock-solid reliability. Whether you're renaming a single variable or refactoring across your entire codebase, refactor.nvim makes it effortless and safe.
+## Table of Contents
 
-<!-- ![Demo](https://via.placeholder.com/800x400/1a1b26/7aa2f7?text=refactor.nvim+Demo) -->
-
----
-
-## 📚 Table of Contents
-
-- [✨ Features](#-features)
-- [🚀 Installation](#-installation)
-- [⚡ Quick Start](#-quick-start)
-- [🎯 Flag System](#-flag-system)
-- [📖 Usage Examples](#-usage-examples)
-- [⚙️ Configuration](#️-configuration)
-- [🎮 Commands](#-commands)
-- [🔍 Advanced Usage](#-advanced-usage)
-- [❓ FAQ](#-faq)
-- [🤝 Contributing](#-contributing)
-- [📄 License](#-license)
+- [Features](#features)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Configuration](#configuration)
+- [Health Check](#health-check)
+- [Author](#author)
+- [License](#license)
 
 ---
 
-## ✨ Features
+## Features
 
-- 🎯 **4-Letter Magic Flags** - `cWrp`, `CWRp` - Intuitive combinations control everything
-- 🔧 **Dual Mode Operations** - Work on current buffer or entire quickfix list
-- 🎨 **Smart Case Preservation** - Maintains your code's existing case patterns
-- 🛡️ **Safe Whole-Word Matching** - Prevents accidental partial replacements
-- 🎭 **Beautiful Interface** - Emoji-powered prompts with real-time feedback
-- ⚡ **Regex Support** - Full Neovim regex power when you need it
-- 🚀 **Zero Configuration** - Works perfectly out of the box
+- Perform find and replace operations in the current file/buffer
+- Extend replacements across the quickfix list
+- Toggle case-sensitive or case-insensitive searches
+- Match whole words or partial text
+- Optionally use regular expressions for complex patterns
+- Optionally preserve case during replacements
+- Cancel operations easily with ESC
+- Receive clear, informative notifications
 
 ---
 
-## 🚀 Installation
+## Installation
 
-### With [lazy.nvim](https://github.com/folke/lazy.nvim)
+`refactor.nvim` requires [NeoVim](https://neovim.io/) 0.7 or later. You can install it using your preferred package manager.
+
+### Using [Lazy](https://github.com/folke/lazy.nvim)
+
+Add the following to your `Lazy` configuration:
 
 ```lua
 {
-    "shifathasangns/refactor.nvim",
-    config = function()
-        require("refactor").setup()
-    end,
+  "ShifatHasanGNS/refactor.nvim",
+  config = function()
+    require("refactor").setup()
+  end
 }
 ```
 
-### With [packer.nvim](https://github.com/wbthomason/packer.nvim)
+### Using [Packer](https://github.com/wbthomason/packer.nvim)
+
+Add the following to your `Packer` configuration:
 
 ```lua
 use {
-    "shifathasangns/refactor.nvim",
-    config = function()
-        require("refactor").setup()
-    end
+  "ShifatHasanGNS/refactor.nvim",
+  config = function()
+    require("refactor").setup()
+  end
 }
 ```
 
-### With [vim-plug](https://github.com/junegunn/vim-plug)
+### Using [Vim-Plug](https://github.com/junegunn/vim-plug)
 
-```vim
-Plug 'shifathasangns/refactor.nvim'
+Add the following to your `vimrc`:
+
+```viml
+Plug 'ShifatHasanGNS/refactor.nvim'
 ```
 
----
-
-## ⚡ Quick Start
-
-1. **Current Buffer**: Press `<leader>r`
-2. **Quickfix List**: Press `<leader>rq`
-3. **Visual Selection**: Select text, then `<leader>r`
-
-**Example Workflow:**
-
-```
-<leader>r
-Flags: cWrp
-Find: userId
-Replace: accountId
-```
-
----
-
-## 🎯 Flag System
-
-The heart of refactor.nvim is its **4-letter flag system**:
-
-```
-Format: [C/c][W/w][R/r][P/p]
-```
-
-| Position | Flag      | Description                                      |
-| -------- | --------- | ------------------------------------------------ |
-| **1**    | `C` / `c` | **Case** - Sensitive / Insensitive               |
-| **2**    | `W` / `w` | **Word** - Whole word / Partial match            |
-| **3**    | `R` / `r` | **Regex** - Enabled / Literal text               |
-| **4**    | `P` / `p` | **Preserve** - Case preservation / Exact replace |
-
-### 🏆 Popular Combinations
-
-| Flag   | Description                           | Perfect For                                  |
-| ------ | ------------------------------------- | -------------------------------------------- |
-| `cWrp` | Case insensitive, whole word, literal | **Most common** - Safe variable renaming     |
-| `CWrp` | Case sensitive, whole word, literal   | **Precise** - Strict language refactoring    |
-| `cWRp` | Case insensitive, whole word, regex   | **Advanced** - Pattern-based transformations |
-| `CWRP` | All features enabled                  | **Maximum control** - Complex refactoring    |
-
----
-
-## 📖 Usage Examples
-
-### Simple Variable Rename
-
-```
-Flags: cWrp
-Find: userId
-Replace: accountId
-Result: userId → accountId (but not userIdList)
-```
-
-### Function to Async Conversion
-
-```
-Flags: cWRp
-Find: function (\w+)
-Replace: async function $1
-Result: function getData() → async function getData()
-```
-
-### Smart Case Preservation
-
-```
-Flags: cWrP
-Find: api
-Replace: service
-Results:
-  API → SERVICE
-  Api → Service
-  api → service
-```
-
-### Multi-file Refactoring
-
-```bash
-# 1. Populate quickfix with search results
-:grep "oldFunction" **/*.js
-
-# 2. Refactor across all matches
-<leader>rq
-Flags: cWrp
-Find: oldFunction
-Replace: newFunction
-```
-
----
-
-## ⚙️ Configuration
-
-### Basic Setup
+Then, in your NeoVim configuration (e.g., `init.lua`):
 
 ```lua
 require("refactor").setup()
 ```
 
-### Custom Configuration
+---
+
+## Usage
+
+It provides two primary commands to initiate refactoring:
+
+- `:RefactorB` - Refactor in the current buffer
+- `:RefactorQ` - Refactor across the quickfix list
+
+Default key mappings are also available (using `<leader>r` as the base):
+
+- `<leader>rb` - Refactor in the current buffer
+- `<leader>rq` - Refactor in the quickfix list
+
+### How It Works
+
+When you run a refactor command, the plugin guides you through these steps:
+
+1. **Flags**: Enter optional flags (e.g., `cw` for case-sensitive and whole-word). Press Enter to use defaults. Available flags:
+   - `c` - Case-sensitive
+   - `w` - Whole-word
+   - `r` - Regular expression
+   - `p` - Preserve case
+2. **Find String**: Enter the text or pattern to search for.
+3. **Replace String**: Enter the replacement text.
+4. **Confirmation**: Type `y` to proceed or `n` to cancel.
+
+Press `ESC` at any prompt to cancel the operation. Notifications will keep you informed throughout the process. To cencel operations just after initiating, you have to press `ESC` twice.
+
+### Example
+
+To replace all occurrences of "Yisra'el" with "Filastin" in the current buffer, case-sensitive and whole-word only:
+
+- Run `:RefactorB` or `<leader>rb`
+- Enter flags: `cw`
+- Find: `Yisra'el`
+- Replace: `Filastin`
+- Confirm: `y`
+
+---
+
+## Configuration
+
+Customize the plugin by passing options to the `setup` function. For example, to set default flags:
 
 ```lua
+-- For Example
 require("refactor").setup({
-    -- Custom keymap (default: "<leader>r")
-    keymap = "<leader>R",
+  -- Case-sensitive and whole-word by default
+  default_flags = "cw"
 })
 ```
 
-### Manual API Usage
+The `default_flags` option accepts any combination of `c`, `w`, `r`, and `p`. Leave it empty (`""`) for default behavior (case-insensitive, partial-match, literal-text, normal-case).
 
-```lua
-local refactor = require("refactor")
+## Health Check
 
--- Direct function calls
-refactor.refactor_buffer()     -- Current buffer
-refactor.refactor_quickfix()   -- Quickfix list
+Ensure the plugin is working correctly by running:
+
 ```
+:checkhealth refactor
+```
+
+This command verifies the NeoVim version and plugin loading status.
 
 ---
 
-## 🎮 Commands
+## Author
 
-| Command                 | Description                | Equivalent   |
-| ----------------------- | -------------------------- | ------------ |
-| `:Refactor`             | Refactor in current buffer | `<leader>r`  |
-| `:RefactorQF`           | Refactor in quickfix list  | `<leader>rq` |
-| `:checkhealth refactor` | Plugin health check        | -            |
+Developed by [**Md. Shifat Hasan**](https://github.com/ShifatHasanGNS)
 
----
+_**Contact**_
 
-## 🔍 Advanced Usage
+[Facebook](https://www.facebook.com/ShifatHasanGNS/)
+&emsp;
+[Instagram](https://www.instagram.com/ShifatHasanGNS/)
+&emsp;
+[Linkedin](https://www.linkedin.com/in/md-shifat-hasan-8179402b4/)
+&emsp;
+[X](https://x.com/ShifatHasanGNS)
 
-### Working with Quickfix Lists
+## License
 
-**1. Search and Populate**
-
-```vim
-:grep "pattern" **/*.lua
-:vimgrep /pattern/j **/*.js
-```
-
-**2. Refactor Across Results**
-
-```
-<leader>rq
-Flags: cWRp
-Find: old_pattern
-Replace: new_pattern
-```
-
-### Visual Selection Workflow
-
-1. **Select text** you want to find (visual mode)
-2. **Press** `<leader>r`
-3. **See selected text** in notification
-4. **Enter flags and replacement**
-
-### Complex Regex Examples
-
-**Swap Function Arguments:**
-
-```
-Flags: cWRp
-Find: (\w+)\((\w+), (\w+)\)
-Replace: $1($3, $2)
-```
-
-**Add Type Annotations:**
-
-```
-Flags: cWRp
-Find: function (\w+)\((.*)\)
-Replace: function $1($2): void
-```
-
----
-
-## ❓ FAQ
-
-**Q: What's the difference between `c` and `C`?**  
-A: `c` = case insensitive (matches `API`, `api`, `Api`), `C` = case sensitive (matches only exact case)
-
-**Q: When should I use `W` vs `w`?**  
-A: `W` = whole words only (safe for variables), `w` = partial matches (good for strings/comments)
-
-**Q: Can I use without the flag system?**  
-A: The flags are required - they prevent accidental replacements and make operations predictable
-
-**Q: Does it work with all file types?**  
-A: Yes! It works with any text in Neovim, regardless of file type
-
-**Q: How do I refactor across my entire project?**  
-A: Use `:grep` or similar to populate quickfix, then `<leader>rq` to refactor across all matches
-
----
-
-## 🤝 Contributing
-
-We love contributions! Here's how to help:
-
-1. **Fork** the repository
-2. **Create** a feature branch: `git checkout -b amazing-feature`
-3. **Commit** your changes: `git commit -m 'Add amazing feature'`
-4. **Push** to branch: `git push origin amazing-feature`
-5. **Open** a Pull Request
-
-### Development Setup
-
-```bash
-git clone https://github.com/shifathasangns/refactor.nvim
-cd refactor.nvim
-# Test locally by symlinking to your Neovim config
-```
-
----
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
----
-
-<div align="center">
-
-**Made with ❤️ for developers who refactor**
-
-[⭐ Star this repo](https://github.com/shifathasangns/refactor.nvim) • [🐛 Report Issues](https://github.com/shifathasangns/refactor.nvim/issues) • [💡 Discussions](https://github.com/shifathasangns/refactor.nvim/discussions)
-
-**Transform your workflow. Refactor with confidence.**
-
-</div>
+`refactor.nvim` is distributed under the [MIT License](./LICENSE).

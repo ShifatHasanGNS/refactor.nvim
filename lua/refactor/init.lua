@@ -1,39 +1,32 @@
 -- Refactor: Advanced Find & Replace Plugin Module for NeoVim
--- Version: 0.1.1
+-- Version: 1.0.0
 -- Author: Md. Shifat Hasan (ShifatHasanGNS)
 -- License: MIT
 
 local M = {}
 
 local config = {
-    default_flags = "",
     -- Case-insensitive, Partial-match, Literal-text, Normal-case
+    default_flags = "",
 }
 
 local refactor_state = {
     cancelled = false
 }
 
-local function check_cancelled()
-    if refactor_state.cancelled then
-        return true
-    end
-    return false
-end
-
 local function smart_notify(message, level, max_width)
     max_width = max_width or 80
     level = level or vim.log.levels.INFO
-    
+
     if type(message) ~= "string" then
         message = tostring(message)
     end
-    
+
     -- Split Long Messages
     if #message > max_width then
         local lines = {}
         local current_line = ""
-        
+
         for word in message:gmatch("%S+") do
             if #current_line + #word + 1 <= max_width then
                 current_line = current_line == "" and word or current_line .. " " .. word
@@ -44,16 +37,16 @@ local function smart_notify(message, level, max_width)
                 current_line = word
             end
         end
-        
+
         if current_line ~= "" then
             table.insert(lines, current_line)
         end
-        
+
         -- Notify Each Line With Delay
         for i, line in ipairs(lines) do
             vim.defer_fn(function()
                 vim.notify(line, level)
-            end, (i - 1) * 100)  -- 100ms delay between notifications
+            end, (i - 1) * 10)  -- 10 ms delay between notifications
         end
     else
         vim.notify(message, level)
@@ -62,9 +55,8 @@ end
 
 -- Parse Flags: Flexible Order
 local function parse_flags(flag_str)
-    if check_cancelled() or flag_str == nil then return nil end
+    if refactor_state.cancelled or flag_str == nil then return nil end
 
-    flag_str = flag_str or ""
     flag_str = vim.trim(flag_str):lower()
 
     local valid_chars = { 'c', 'w', 'r', 'p' }
@@ -186,13 +178,13 @@ end
 
 -- Buffer Replace with Smart Delimiter
 local function execute_buffer_replace(params)
-    if check_cancelled() then return false end
-    
+    if refactor_state.cancelled then return false end
+
     local pattern = build_search_pattern(params.find, params.flags)  
     if not pattern then return false end
-    
+
     local replace = escape_replacement_string(params.replace, params.flags.preserve_case)
-    
+
     -- Pick Safe Delimiter
     local delim_options = {'/', '#', '@', '|', '!', '%', '~', ';', ':'}
     local delimiter = nil
@@ -260,25 +252,25 @@ end
 -- Async Input
 local function get_user_input(scope)
     refactor_state.cancelled = false  -- Reset Cancel
-    
+
     vim.cmd('redraw')
-    
+
     -- Show Help Info
     smart_notify("🔧 Refactor: " .. (scope == "quickfix" and "Quickfix List" or "Current Buffer"), vim.log.levels.INFO)
     smart_notify("Press ESC at any input to cancel", vim.log.levels.INFO)
-    
+
     vim.defer_fn(function()
         smart_notify("Flag Format: [c w r p] (any order, optional)", vim.log.levels.INFO)
     end, 200)
-    
+
     vim.defer_fn(function()
         smart_notify("Flags: c=Case-sensitive, w=Whole-word, r=RegEx, p=Preserve-case", vim.log.levels.INFO)
     end, 400)
-    
+
     vim.defer_fn(function()
         smart_notify("Examples: 'cw'=Case+Whole, 'p'=Preserve only, ''=All defaults", vim.log.levels.INFO)
     end, 600)
-    
+
     -- Wait For Notifications
     vim.defer_fn(function()
         -- Get flags (empty input means use default flags)
@@ -286,7 +278,7 @@ local function get_user_input(scope)
         if flags_input == nil then return end  -- Cancelled
         local flags = parse_flags(flags_input)
 
-        if check_cancelled() or flags == nil then return end
+        if refactor_state.cancelled or flags == nil then return end
 
         local flag_display = {}
         table.insert(flag_display, flags.case_sensitive and "Case-sensitive" or "Case-insensitive")
@@ -297,11 +289,11 @@ local function get_user_input(scope)
 
         -- Get find string (required)
         local find_str = get_input_with_esc("Find: ", "", "find")
-        if check_cancelled() or find_str == nil then return end
+        if refactor_state.cancelled or find_str == nil then return end
 
         -- Get replace string (empty is allowed)
         local replace_str = get_input_with_esc("Replace: ", "", "replace")
-        if check_cancelled() or replace_str == nil then return end
+        if refactor_state.cancelled or replace_str == nil then return end
 
         -- Confirmation step
         local confirm = get_input_with_esc("Proceed to Refactor? [y/n]: ", "y", "confirm")
@@ -317,17 +309,17 @@ local function get_user_input(scope)
             replace = replace_str or ""  -- Ensure it’s a string
         }
         vim.defer_fn(function()
-            if not check_cancelled() then
+            if not refactor_state.cancelled then
                 M._continue_refactor(scope, params)
             end
         end, 100)
     end, 800)
 
-    return nil  -- Asynchronous operation
+    return nil -- Asynchronous operation
 end
 
 local function execute_quickfix_replace(params)
-    if check_cancelled() then return false end
+    if refactor_state.cancelled then return false end
 
     local qf_list = vim.fn.getqflist()
     local qf_count = #qf_list
@@ -382,7 +374,7 @@ local function execute_quickfix_replace(params)
     end
 
     for bufnr, line_numbers in pairs(buffers_to_lines) do
-        if check_cancelled() then break end
+        if refactor_state.cancelled then break end
 
         local filename = vim.fn.bufname(bufnr)
         local display_name = vim.fn.fnamemodify(filename, ":t")
@@ -398,7 +390,7 @@ local function execute_quickfix_replace(params)
             table.sort(line_numbers)
             local replacements_in_buf = 0
             for _, lnum in ipairs(line_numbers) do
-                if check_cancelled() then break end
+                if refactor_state.cancelled then break end
                 local cmd = string.format('%ds%s%s%s%s%sgc', lnum, delimiter, pattern, delimiter, replace, delimiter)
                 if not params.flags.case_sensitive then
                     cmd = cmd .. 'i'
@@ -438,14 +430,14 @@ end
 
 -- After Input
 function M._continue_refactor(scope, params)
-    if check_cancelled() then return end
-    
+    if refactor_state.cancelled then return end
+
     local flag_chars = {}
     if params.flags.case_sensitive then table.insert(flag_chars, "c") end
     if params.flags.whole_word then table.insert(flag_chars, "w") end
     if params.flags.use_regex then table.insert(flag_chars, "r") end
     if params.flags.preserve_case then table.insert(flag_chars, "p") end
-    
+
     local flag_str = table.concat(flag_chars, "")
     if flag_str == "" then flag_str = "none" end
 
