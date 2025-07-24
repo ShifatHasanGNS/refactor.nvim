@@ -14,6 +14,13 @@ local refactor_state = {
     cancelled = false
 }
 
+local function check_cancelled()
+    if refactor_state.cancelled then
+        return true
+    end
+    return false
+end
+
 local function smart_notify(message, level, max_width)
     max_width = max_width or 80
     level = level or vim.log.levels.INFO
@@ -90,6 +97,8 @@ local function parse_flags(flag_str)
             preserve_case = false
         }
     end
+
+    if check_cancelled() then return nil end
 
     return flags
 end
@@ -173,13 +182,6 @@ end
 -- Global Wrapper-Function for 'apply_case_preservation' Function
 function _G.refactor_preserve_case_replace(original, replacement)
     return apply_case_preservation(original, replacement)
-end
-
-local function check_cancelled()
-    if refactor_state.cancelled then
-        return true
-    end
-    return false
 end
 
 -- Buffer Replace with Smart Delimiter
@@ -286,13 +288,6 @@ local function get_user_input(scope)
 
         if check_cancelled() or flags == nil then return end
 
-        -- Confirmation step
-        local confirm = get_input_with_esc("Proceed to Refactor? [y/n]: ", "y", "confirm")
-        if confirm == nil or confirm:lower() == "n" then
-            smart_notify("🚫 Operation Cancelled", vim.log.levels.INFO)
-            return
-        end
-
         local flag_display = {}
         table.insert(flag_display, flags.case_sensitive and "Case-sensitive" or "Case-insensitive")
         table.insert(flag_display, flags.whole_word and "Whole-word" or "Partial-match")
@@ -303,13 +298,6 @@ local function get_user_input(scope)
         -- Get find string (required)
         local find_str = get_input_with_esc("Find: ", "", "find")
         if check_cancelled() or find_str == nil then return end
-
-        -- Confirmation step
-        local confirm = get_input_with_esc("Proceed to Refactor? [y/n]: ", "y", "confirm")
-        if confirm == nil or confirm:lower() == "n" then
-            smart_notify("🚫 Operation Cancelled", vim.log.levels.INFO)
-            return
-        end
 
         -- Get replace string (empty is allowed)
         local replace_str = get_input_with_esc("Replace: ", "", "replace")
