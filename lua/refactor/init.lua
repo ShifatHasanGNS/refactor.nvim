@@ -175,33 +175,6 @@ function _G.refactor_preserve_case_replace(original, replacement)
     return apply_case_preservation(original, replacement)
 end
 
--- Get Input: ESC Cancels, with mode for input type (required)
--- mode: "flag", "find", "replace" (must be specified)
-local function get_input_with_esc(prompt, default, mode)
-    assert(mode == "flag" or mode == "find" or mode == "replace" or mode == "confirm", "Invalid mode")
-    default = default or ""
-
-    vim.cmd('call inputsave()')
-    local result = vim.fn.input(prompt, default)
-    vim.cmd('call inputrestore()')
-
-    if result == nil then
-        -- This case shouldn’t normally happen with vim.fn.input, but we’ll handle it
-        refactor_state.cancelled = true
-        smart_notify("🚫 Operation Cancelled", vim.log.levels.INFO)
-        return nil
-    end
-
-    if mode == "find" and result == '' then
-        -- Cancel if no find string is provided
-        smart_notify("🚫 No Find String was Entered", vim.log.levels.INFO)
-        refactor_state.cancelled = true
-        return nil
-    end
-
-    return result
-end
-
 local function check_cancelled()
     if refactor_state.cancelled then
         return true
@@ -255,6 +228,33 @@ local function execute_buffer_replace(params)
     end
 end
 
+-- Get Input: ESC Cancels, with mode for input type (required)
+-- mode: "flag", "find", "replace" (must be specified)
+local function get_input_with_esc(prompt, default, mode)
+    assert(mode == "flag" or mode == "find" or mode == "replace" or mode == "confirm", "Invalid mode")
+    default = default or ""
+
+    vim.cmd('call inputsave()')
+    local result = vim.fn.input(prompt, default)
+    vim.cmd('call inputrestore()')
+
+    if result == nil then
+        -- This case shouldn’t normally happen with vim.fn.input, but we’ll handle it
+        refactor_state.cancelled = true
+        smart_notify("🚫 Operation Cancelled\ndue to ESC or Inavlid Input", vim.log.levels.INFO)
+        exit(0)
+    end
+
+    if mode == "find" and result == '' then
+        -- Cancel if no find string is provided
+        smart_notify("🚫 No Find String was Entered", vim.log.levels.INFO)
+        refactor_state.cancelled = true
+        return nil
+    end
+
+    return result
+end
+
 -- Async Input
 local function get_user_input(scope)
     refactor_state.cancelled = false  -- Reset Cancel
@@ -284,8 +284,7 @@ local function get_user_input(scope)
         if flags_input == nil then return end  -- Cancelled
         local flags = parse_flags(flags_input or "")
 
-        -- if check_cancelled() or flags == nil then return end
-        assert(flags ~= nil, "Invalid flags")
+        if check_cancelled() or flags == nil then return end
 
         local flag_display = {}
         table.insert(flag_display, flags.case_sensitive and "Case-sensitive" or "Case-insensitive")
@@ -296,14 +295,20 @@ local function get_user_input(scope)
 
         -- Get find string (required)
         local find_str = get_input_with_esc("Find: ", "", "find")
-        if find_str == nil then return end  -- Cancelled due to empty input
+        if check_cancelled() or find_str == nil then
+            smart_notify("🚫 Operation Cancelled\ndue to ESC or Empty Find String", vim.log.levels.INFO)
+            return
+        end
 
         -- Get replace string (empty is allowed)
         local replace_str = get_input_with_esc("Replace: ", "", "replace")
-        if replace_str == nil then return end  -- Cancelled
+        if check_cancelled() or replace_str == nil then
+            smart_notify("🚫 Operation Cancelled\ndue to ESC", vim.log.levels.INFO)
+            return
+        end
 
         -- Confirmation step
-        local confirm = get_input_with_esc("Proceed with these settings? [Y/n]: ", "Y", "confirm")
+        local confirm = get_input_with_esc("Proceed to Refactor? [y/n]: ", "y", "confirm")
         if confirm == nil or confirm:lower() == "n" then
             smart_notify("🚫 Operation Cancelled", vim.log.levels.INFO)
             return
