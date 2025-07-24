@@ -300,6 +300,9 @@ local function get_user_input(scope)
         table.insert(flag_display, flags.whole_word and "Whole-word" or "Partial-match")
         table.insert(flag_display, flags.use_regex and "RegEx" or "Literal-text")
         table.insert(flag_display, flags.preserve_case and "Preserve-case" or "Normal-case")
+
+        if check_cancelled() then return end
+        
         smart_notify("Active: " .. table.concat(flag_display, " | "), vim.log.levels.INFO)
 
         local find_str = get_input_with_esc("Find: ", "", "find")
@@ -324,9 +327,6 @@ local function get_user_input(scope)
     
     return nil  -- Async
 end
-
-
-
 
 local function execute_quickfix_replace(params)
     if check_cancelled() then return false end
@@ -491,7 +491,6 @@ function M.setup(opts)
         config.default_flags = opts.default_flags
     end
 
-
     vim.api.nvim_create_user_command('RefactorB', function()
         refactor(false)
     end, { desc = "Advanced Find and Replace in Current Buffer" })
@@ -504,7 +503,6 @@ function M.setup(opts)
     local base_keymap = opts.keymap or '<leader>r'
 
     vim.keymap.set('n', base_keymap, function()
-        -- refactor(false)
     end, vim.tbl_extend('force', keymap_opts, { desc = "🔧 Refactor (Find & Replace)" }))
 
     vim.keymap.set('n', base_keymap .. 'b', function()
