@@ -513,7 +513,6 @@ function M.setup(opts)
         refactor(true)
     end, vim.tbl_extend('force', keymap_opts, { desc = "📋 Refactor QuickFix List" }))
 
-    smart_notify("🔧 Refactor Plugin Loaded!", vim.log.levels.INFO)
     local ok, _ = pcall(require, 'refactor')
     if not ok then
         smart_notify("⚠️ Failed to load Refactor (refactor.nvim)!", vim.log.levels.WARN)
