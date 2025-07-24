@@ -278,7 +278,7 @@ local function get_user_input(scope)
     end, 600)
     
     -- Wait For Notifications
-    -- vim.defer_fn(function()
+    vim.defer_fn(function()
         -- Get flags (empty input means use default flags)
         local flags_input = get_input_with_esc("Flags [c w r p]: ", config.default_flags, "flag")
         if flags_input == nil then return end  -- Cancelled
@@ -314,14 +314,14 @@ local function get_user_input(scope)
             find = find_str,
             replace = replace_str or ""  -- Ensure it’s a string
         }
-        -- vim.defer_fn(function()
-        --     if not check_cancelled() then
-        --         M._continue_refactor(scope, params)
-        --     end
-        -- end, 100)
-    -- end, 800)
+        vim.defer_fn(function()
+            if not check_cancelled() then
+                M._continue_refactor(scope, params)
+            end
+        end, 100)
+    end, 800)
 
-    return params  -- Asynchronous operation
+    return nil  -- Asynchronous operation
 end
 
 local function execute_quickfix_replace(params)
