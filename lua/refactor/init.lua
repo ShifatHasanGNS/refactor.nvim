@@ -327,27 +327,28 @@ local function get_user_input(scope)
 end
 
 
+
 local function execute_quickfix_replace(params)
     if check_cancelled() then return false end
-    
+
     local qf_list = vim.fn.getqflist()
     local qf_count = #qf_list
-    
+
     if qf_count == 0 then
         smart_notify("📋 No quickfix entries found", vim.log.levels.WARN)
         return false
     end
-    
+
     local pattern = build_search_pattern(params.find, params.flags)
     if not pattern then return false end
-    
+
     smart_notify(string.format("🔧 Processing %d quickfix entries...", qf_count), vim.log.levels.INFO)
-    
+
     local success_count = 0
-    
+
     local original_buf = vim.fn.bufnr('%')
     local original_pos = vim.fn.getcurpos()
-    
+
     -- Pick Safe Delimiter
     local delim_options = {'/', '#', '@', '|', '!', '%', '~', ';', ':'}
     local delimiter = nil
@@ -370,70 +371,70 @@ local function execute_quickfix_replace(params)
             replace = vim.fn.escape(replace, delimiter)
         end
     end
-    
-    local buffers_to_process = {}
+
+    -- Collect line numbers for each buffer
+    local buffers_to_lines = {}
     for _, qf_item in ipairs(qf_list) do
         if qf_item.bufnr and qf_item.bufnr > 0 and qf_item.lnum and qf_item.lnum > 0 then
-            if not buffers_to_process[qf_item.bufnr] then
-                buffers_to_process[qf_item.bufnr] = {}
+            if not buffers_to_lines[qf_item.bufnr] then
+                buffers_to_lines[qf_item.bufnr] = {}
             end
-            table.insert(buffers_to_process[qf_item.bufnr], qf_item)
+            buffers_to_lines[qf_item.bufnr][qf_item.lnum] = true
         end
     end
-    
-    for bufnr, items in pairs(buffers_to_process) do
+
+    for bufnr, lines_tbl in pairs(buffers_to_lines) do
         if check_cancelled() then break end
-        
+
         local filename = vim.fn.bufname(bufnr)
         local display_name = vim.fn.fnamemodify(filename, ":t")
-        
-        smart_notify(string.format("🔄 Processing: %s (%d locations)", display_name, #items), vim.log.levels.INFO)
-        
+
+        smart_notify(string.format("🔄 Processing: %s (%d locations)", display_name, vim.tbl_count(lines_tbl)), vim.log.levels.INFO)
+
         local ok = pcall(function()
             if not vim.fn.bufloaded(bufnr) then
                 vim.cmd('badd ' .. vim.fn.fnameescape(filename))
             end
-            
             vim.cmd('buffer ' .. bufnr)
-            
-            table.sort(items, function(a, b) return a.lnum > b.lnum end)
-            
-            for _, qf_item in ipairs(items) do
-                if check_cancelled() then break end
-                
-                local cmd = string.format("%ds%s%s%s%s%sgc", 
-                    qf_item.lnum, delimiter, pattern, delimiter, replace, delimiter)
-                if not params.flags.case_sensitive then
-                    cmd = cmd .. 'i'
-                end
-                vim.fn.cursor(qf_item.lnum, 1)
-                local line_ok = pcall(function()
-                    vim.cmd(cmd)
-                end)
-                if line_ok then
-                    success_count = success_count + 1
-                end
+
+            -- Build a range string for all lines
+            local line_numbers = {}
+            for lnum, _ in pairs(lines_tbl) do
+                table.insert(line_numbers, lnum)
             end
-            
+            table.sort(line_numbers)
+
+            -- Build range string (e.g., 3,5,8)
+            local range_str = table.concat(line_numbers, ',')
+            local cmd = ''
+            if #line_numbers == 1 then
+                cmd = string.format('%ds%s%s%s%s%sgc', line_numbers[1], delimiter, pattern, delimiter, replace, delimiter)
+            else
+                cmd = string.format('%d,%ds%s%s%s%s%sgc', line_numbers[1], line_numbers[#line_numbers], delimiter, pattern, delimiter, replace, delimiter)
+            end
+            if not params.flags.case_sensitive then
+                cmd = cmd .. 'i'
+            end
+            vim.cmd(cmd)
             vim.cmd('write')
         end)
-        
+
         if not ok then
             smart_notify("❌ Failed: " .. display_name, vim.log.levels.ERROR)
         else
             smart_notify("✅ Success: " .. display_name, vim.log.levels.INFO)
         end
     end
-    
+
     pcall(function()
         if vim.fn.bufexists(original_buf) then
             vim.cmd('buffer ' .. original_buf)
             vim.fn.setpos('.', original_pos)
         end
     end)
-    
-    if success_count > 0 then
-        smart_notify("✅ Quickfix: " .. success_count .. " entries processed", vim.log.levels.INFO)
+
+    if qf_count > 0 then
+        smart_notify("✅ Quickfix: " .. qf_count .. " entries processed", vim.log.levels.INFO)
         vim.cmd('copen')
         return true
     else
