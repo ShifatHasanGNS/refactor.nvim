@@ -11,68 +11,12 @@ local config = {
     default_quickfix_mode = "manual"
 }
 
--- Global state for cancellation and notifications
+-- Global state for cancellation
 local refactor_state = {
     cancelled = false
 }
 
--- Notification queue management
-local notification_queue = {}
-local notification_id_counter = 0
-
--- Custom notification manager with proper stacking
-local function managed_notify(message, level, duration)
-    level = level or vim.log.levels.INFO
-    duration = duration or 3000  -- Default 3 seconds
-    
-    notification_id_counter = notification_id_counter + 1
-    local id = notification_id_counter
-    
-    -- Add to queue
-    local notification = {
-        id = id,
-        message = message,
-        level = level,
-        timestamp = vim.loop.now()
-    }
-    
-    table.insert(notification_queue, notification)
-    
-    -- Show the notification
-    vim.notify(message, level)
-    
-    -- Auto-remove after duration
-    vim.defer_fn(function()
-        -- Remove from queue
-        for i, notif in ipairs(notification_queue) do
-            if notif.id == id then
-                table.remove(notification_queue, i)
-                break
-            end
-        end
-        
-        -- Restack remaining notifications if any
-        if #notification_queue > 0 then
-            vim.defer_fn(function()
-                -- Clear screen and redisplay remaining notifications
-                vim.cmd('redraw')
-                for _, remaining_notif in ipairs(notification_queue) do
-                    -- Only redisplay if not too old (within 1 second of removal)
-                    local age = vim.loop.now() - remaining_notif.timestamp
-                    if age < duration + 1000 then
-                        vim.schedule(function()
-                            vim.notify(remaining_notif.message, remaining_notif.level)
-                        end)
-                    end
-                end
-            end, 50)  -- Small delay to ensure proper restacking
-        end
-    end, duration)
-    
-    return id
-end
-
--- Enhanced notification with length management and proper stacking
+-- Enhanced notification with length management
 local function smart_notify(message, level, max_width)
     max_width = max_width or 80
     level = level or vim.log.levels.INFO
@@ -104,11 +48,11 @@ local function smart_notify(message, level, max_width)
         -- Show each line as separate notification with small delay
         for i, line in ipairs(lines) do
             vim.defer_fn(function()
-                managed_notify(line, level)
-            end, (i - 1) * 150)  -- 150ms delay between notifications
+                vim.notify(line, level)
+            end, (i - 1) * 100)  -- 100ms delay between notifications
         end
     else
-        managed_notify(message, level)
+        vim.notify(message, level)
     end
 end
 
@@ -233,9 +177,6 @@ end
 local function get_input_with_esc(prompt, default)
     default = default or ""
     
-    -- Clear any pending notifications to avoid interference
-    vim.cmd('redraw')
-    
     local ok, result = pcall(function()
         return vim.fn.input(prompt, default)
     end)
@@ -315,7 +256,6 @@ end
 -- Enhanced user input with ESC support
 local function get_user_input(scope, prefill_find)
     refactor_state.cancelled = false  -- Reset cancellation state
-    notification_queue = {}  -- Clear notification queue for fresh start
     
     vim.cmd('redraw')
     
