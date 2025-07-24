@@ -16,46 +16,46 @@ local config = {
         preserve = { on = "🎨", off = "✨" }
     },
     max_selection_length = 200,  -- Maximum length for visual selections
-    default_flags = "cWrp",      -- Default flag combination
+    default_flags = "w",      -- Default flag combination
     default_quickfix_mode = "manual"  -- Default quickfix processing mode
 }
 
--- Enhanced flag parsing with validation and helpful errors
+-- Enhanced flag parsing with flexible order and optional flags
 local function parse_flags(flag_str)
-    if not flag_str or flag_str == "" then
-        vim.notify("❌ Empty flag!\nUse Format: [C/c][W/w][R/r][P/p]\nExample: 'cWrp'", vim.log.levels.ERROR)
-        return nil
+    if not flag_str then
+        flag_str = ""
     end
-
-    if #flag_str ~= 4 then
-        vim.notify("❌ Flag must have exactly 4 characters!\nFormat: [C/c][W/w][R/r][P/p]\nExample: 'cWrp'", vim.log.levels.ERROR)
-        return nil
-    end
-
-    local chars = {flag_str:match("(.)(.)(.)(.)") }
-    local valid_chars = {
-        [1] = { 'C', 'c' }, -- Case
-        [2] = { 'W', 'w' }, -- Word  
-        [3] = { 'R', 'r' }, -- RegEx
-        [4] = { 'P', 'p' }  -- Preserve
-    }
-
-    -- Validate each character
-    for i, char in ipairs(chars) do
-        if not vim.tbl_contains(valid_chars[i], char) then
-            local expected = table.concat(valid_chars[i], "/")
-            vim.notify(string.format("❌ Invalid character '%s' at position %d\nExpected: %s", char, i, expected), vim.log.levels.ERROR)
+    
+    -- Trim whitespace and convert to lowercase for consistency
+    flag_str = vim.trim(flag_str):lower()
+    
+    -- Validate that all characters are valid
+    local valid_chars = { 'c', 'w', 'r', 'p' }
+    local seen_chars = {}
+    
+    for i = 1, #flag_str do
+        local char = flag_str:sub(i, i)
+        if not vim.tbl_contains(valid_chars, char) then
+            vim.notify(string.format("❌ Invalid flag character '%s'\nValid flags: c, w, r, p", char), vim.log.levels.ERROR)
             return nil
         end
+        
+        -- Check for duplicates
+        if seen_chars[char] then
+            vim.notify(string.format("❌ Duplicate flag character '%s'\nEach flag can only be used once", char), vim.log.levels.ERROR)
+            return nil
+        end
+        seen_chars[char] = true
     end
-
+    
+    -- Parse flags - present = true, missing = false
     local flags = {
-        case_sensitive = chars[1] == 'C',
-        whole_word = chars[2] == 'W', 
-        use_regex = chars[3] == 'R',
-        preserve_case = chars[4] == 'P'
+        case_sensitive = flag_str:find('c') ~= nil,
+        whole_word = flag_str:find('w') ~= nil,
+        use_regex = flag_str:find('r') ~= nil,
+        preserve_case = flag_str:find('p') ~= nil
     }
-
+    
     return flags
 end
 
@@ -210,26 +210,25 @@ local function get_user_input(scope, prefill_find)
     local scope_text = scope == "quickfix" and "Quickfix List" or "Current Buffer"
 
     vim.cmd('redraw')
-    vim.notify("Flag Format: C/c W/w R/r P/p", vim.log.levels.INFO)
-    vim.notify("C/c : Case Sensitive/Insensitive\nW/w : Match Whole/Partial String\nR/r : RegEx/Literal-Text\nP/p : Preserve/Not Case while Replacing", vim.log.levels.INFO)
-    vim.notify("Example:\ncWrp (Case-insensitive Match)\nCWrp (Exact Match)\nCWRp (RegEx)\n...13 others", vim.log.levels.INFO)
-    local flags_input = vim.fn.input("Flags [C/c W/w R/r P/p]: ", config.default_flags)
-    if flags_input == "" then
-        vim.notify("🚫 Refactor cancelled: No flag entered", vim.log.levels.INFO)
-        return nil
-    end
+    vim.notify("Flag Format: [c][w][r][p] (any order, optional)", vim.log.levels.INFO)
+    vim.notify("c : Case Sensitive (default: insensitive)\nw : Whole Word Match (default: partial)\nr : RegEx Pattern (default: literal)\np : Preserve Case (default: don't preserve)", vim.log.levels.INFO)
+    vim.notify("Examples:\n• 'cw' = Case-sensitive, Whole word\n• 'p' = Preserve case only\n• 'wr' = Whole word + RegEx\n• '' = All defaults (case-insens, partial, literal, no-preserve)", vim.log.levels.INFO)
+    
+    local flags_input = vim.fn.input("Flags [c w r p]: ", config.default_flags)
     local flags = parse_flags(flags_input)
     if not flags then
         vim.notify("🚫 Refactor cancelled: Invalid flag", vim.log.levels.INFO)
         return nil
     end
-    local flag_str = string.format("%s%s%s%s",
-        flags.case_sensitive and "C" or "c",
-        flags.whole_word and "W" or "w",
-        flags.use_regex and "R" or "r",
-        flags.preserve_case and "P" or "p"
-    )
-    vim.notify("Current Flags: "..flag_str, vim.log.levels.INFO)
+    
+    -- Build display string for current flags
+    local flag_display = {}
+    if flags.case_sensitive then table.insert(flag_display, "Case-sensitive") else table.insert(flag_display, "Case-insensitive") end
+    if flags.whole_word then table.insert(flag_display, "Whole word") else table.insert(flag_display, "Partial match") end
+    if flags.use_regex then table.insert(flag_display, "RegEx") else table.insert(flag_display, "Literal text") end
+    if flags.preserve_case then table.insert(flag_display, "Preserve case") else table.insert(flag_display, "Don't preserve case") end
+    
+    vim.notify("Active flags: " .. table.concat(flag_display, " | "), vim.log.levels.INFO)
 
     if scope == "quickfix" then
         vim.notify("Choose Replace Mode: auto (fast, all files) or manual (precise, per line)", vim.log.levels.INFO)
@@ -520,12 +519,14 @@ local function refactor(use_quickfix, prefill_find)
     if not params then return end
 
     -- Show summary
-    local flag_str = string.format("%s%s%s%s",
-        params.flags.case_sensitive and "C" or "c",
-        params.flags.whole_word and "W" or "w", 
-        params.flags.use_regex and "R" or "r",
-        params.flags.preserve_case and "P" or "p"
-    )
+    local flag_chars = {}
+    if params.flags.case_sensitive then table.insert(flag_chars, "c") end
+    if params.flags.whole_word then table.insert(flag_chars, "w") end
+    if params.flags.use_regex then table.insert(flag_chars, "r") end
+    if params.flags.preserve_case then table.insert(flag_chars, "p") end
+    
+    local flag_str = table.concat(flag_chars, "")
+    if flag_str == "" then flag_str = "none" end
 
     local mode_info = ""
     if use_quickfix then
