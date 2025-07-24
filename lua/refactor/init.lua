@@ -242,14 +242,14 @@ local function get_input_with_esc(prompt, default, mode)
         -- This case shouldn’t normally happen with vim.fn.input, but we’ll handle it
         refactor_state.cancelled = true
         smart_notify("🚫 Operation Cancelled\ndue to ESC or Inavlid Input", vim.log.levels.INFO)
-        return nil
+        exit(0)
     end
 
     if mode == "find" and result == "" then
         -- Cancel if no find string is provided
         smart_notify("🚫 Operation Cancelled\nNo Find String was Entered", vim.log.levels.INFO)
         refactor_state.cancelled = true
-        return nil
+        exit(0)
     end
 
     return result
